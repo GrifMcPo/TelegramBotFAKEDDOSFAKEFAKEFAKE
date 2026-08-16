@@ -4,6 +4,7 @@ import sys
 import logging
 import traceback
 import random
+import requests
 from datetime import datetime
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
@@ -65,6 +66,132 @@ async def safe_delete_message(chat_id: int, message_id: int):
         logger.debug(f"⚠️ Не удалось удалить сообщение {message_id}: {e}")
     return False
 
+# ========== ФУНКЦИЯ ДЛЯ РЕАЛЬНОГО ПРОБИВА IP ==========
+async def get_real_ip_info(ip: str):
+    """Получение реальной информации об IP через API ip-api.com"""
+    try:
+        # Отправляем запрос к бесплатному API
+        response = requests.get(
+            f'http://ip-api.com/json/{ip}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,isp,org,as,asname,timezone,query',
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            if data.get('status') == 'success':
+                # Формируем красивый ответ с реальными данными
+                info_text = (
+                    f"╔══════════════════════════════════════════════════════════╗\n"
+                    f"║         📊 ДАННЫЕ С СЕРВЕРА ПРОБИВА 📊                ║\n"
+                    f"╚══════════════════════════════════════════════════════════╝\n\n"
+                    f"┌────────────────────────────────────────────────────────┐\n"
+                    f"│  🌐 IP-АДРЕС:     {data['query']}                   │\n"
+                    f"│  🌍 СТРАНА:       {data['country']} {data.get('countryCode', '')}                         │\n"
+                    f"│  🏙️ РЕГИОН:       {data['regionName']}                       │\n"
+                    f"│  🏙️ ГОРОД:        {data['city']}                             │\n"
+                    f"│  📮 ПОЧТОВЫЙ ИНДЕКС: {data['zip']}                           │\n"
+                    f"│  📍 КООРДИНАТЫ:   {data['lat']}, {data['lon']}                       │\n"
+                    f"│  🗺️ КАРТА:        https://maps.google.com/maps?q={data['lat']},{data['lon']} │\n"
+                    f"│  📡 ПРОВАЙДЕР:    {data['isp']}                              │\n"
+                    f"│  🏢 ОРГАНИЗАЦИЯ:  {data['org']}                              │\n"
+                    f"│  🔗 AS:           {data['as']} ({data.get('asname', '')})                    │\n"
+                    f"│  ⏰ ЧАСОВОЙ ПОЯС:  {data['timezone']}                        │\n"
+                    f"└────────────────────────────────────────────────────────┘\n\n"
+                    f"✅ ПРОБИВ УСПЕШНО ЗАВЕРШЕН!\n\n"
+                    f"📌 ИНФОРМАЦИЯ ПОЛУЧЕНА С СЕРВЕРА:\n"
+                    f"• ВРЕМЯ ЗАПРОСА: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\n"
+                    f"• СЕРВЕР: SRV-PROBE-01\n"
+                    f"• СТАТУС: 200 OK\n"
+                    f"• ТОЧНОСТЬ: 98.7%\n\n"
+                    f"🔒 ДАННЫЕ ЗАЛОГИРОВАНЫ В СИСТЕМЕ!\n"
+                    f"💀 ВСЯ ИНФОРМАЦИЯ ЗАШИФРОВАНА!"
+                )
+                return {'success': True, 'text': info_text, 'data': data}
+            else:
+                error_text = (
+                    f"╔══════════════════════════════════════════════════════════╗\n"
+                    f"║         ⚠️ ОШИБКА СЕРВЕРА ПРОБИВА ⚠️                  ║\n"
+                    f"╚══════════════════════════════════════════════════════════╝\n\n"
+                    f"┌────────────────────────────────────────────────────────┐\n"
+                    f"│  ❌ НЕ УДАЛОСЬ ПОЛУЧИТЬ ДАННЫЕ С СЕРВЕРА             │\n"
+                    f"├────────────────────────────────────────────────────────┤\n"
+                    f"│  📌 КОД ОШИБКИ: {data.get('status', 'UNKNOWN')}       │\n"
+                    f"│  📌 ОПИСАНИЕ: {data.get('message', 'Неизвестная ошибка')}│\n"
+                    f"│  🕐 ВРЕМЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}                             │\n"
+                    f"│  🖥️ СЕРВЕР: SRV-PROBE-01                             │\n"
+                    f"└────────────────────────────────────────────────────────┘\n\n"
+                    f"📌 ВОЗМОЖНЫЕ ПРИЧИНЫ:\n"
+                    f"• IP-АДРЕС НЕ НАЙДЕН В БАЗЕ\n"
+                    f"• ПРЕВЫШЕН ЛИМИТ ЗАПРОСОВ\n"
+                    f"• ТЕХНИЧЕСКИЕ РАБОТЫ НА СЕРВЕРЕ\n"
+                    f"• ПРОБЛЕМЫ С СЕТЕВЫМ СОЕДИНЕНИЕМ\n\n"
+                    f"🔄 НАПИШИТЕ /start ДЛЯ ПОВТОРНОЙ ПОПЫТКИ"
+                )
+                return {'success': False, 'text': error_text}
+        else:
+            error_text = (
+                f"╔══════════════════════════════════════════════════════════╗\n"
+                f"║         ⚠️ ОШИБКА СЕРВЕРА ПРОБИВА ⚠️                  ║\n"
+                f"╚══════════════════════════════════════════════════════════╝\n\n"
+                f"┌────────────────────────────────────────────────────────┐\n"
+                f"│  ❌ НЕ УДАЛОСЬ ПОЛУЧИТЬ ДАННЫЕ С СЕРВЕРА             │\n"
+                f"├────────────────────────────────────────────────────────┤\n"
+                f"│  📌 КОД ОШИБКИ: {response.status_code}                 │\n"
+                f"│  📌 ОПИСАНИЕ: Ошибка подключения к серверу           │\n"
+                f"│  🕐 ВРЕМЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}                             │\n"
+                f"│  🖥️ СЕРВЕР: SRV-PROBE-01                             │\n"
+                f"└────────────────────────────────────────────────────────┘\n\n"
+                f"🔄 НАПИШИТЕ /start ДЛЯ ПОВТОРНОЙ ПОПЫТКИ"
+            )
+            return {'success': False, 'text': error_text}
+            
+    except requests.exceptions.Timeout:
+        error_text = (
+            f"╔══════════════════════════════════════════════════════════╗\n"
+            f"║         ⚠️ ОШИБКА СЕРВЕРА ПРОБИВА ⚠️                  ║\n"
+            f"╚══════════════════════════════════════════════════════════╝\n\n"
+            f"┌────────────────────────────────────────────────────────┐\n"
+            f"│  ❌ ПРЕВЫШЕНО ВРЕМЯ ОЖИДАНИЯ ОТВЕТА                   │\n"
+            f"├────────────────────────────────────────────────────────┤\n"
+            f"│  📌 ОПИСАНИЕ: Сервер не отвечает                      │\n"
+            f"│  🕐 ВРЕМЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}                             │\n"
+            f"│  🖥️ СЕРВЕР: SRV-PROBE-01                             │\n"
+            f"└────────────────────────────────────────────────────────┘\n\n"
+            f"🔄 НАПИШИТЕ /start ДЛЯ ПОВТОРНОЙ ПОПЫТКИ"
+        )
+        return {'success': False, 'text': error_text}
+    except requests.exceptions.ConnectionError:
+        error_text = (
+            f"╔══════════════════════════════════════════════════════════╗\n"
+            f"║         ⚠️ ОШИБКА СЕРВЕРА ПРОБИВА ⚠️                  ║\n"
+            f"╚══════════════════════════════════════════════════════════╝\n\n"
+            f"┌────────────────────────────────────────────────────────┐\n"
+            f"│  ❌ НЕ УДАЛОСЬ ПОДКЛЮЧИТЬСЯ К СЕРВЕРУ                 │\n"
+            f"├────────────────────────────────────────────────────────┤\n"
+            f"│  📌 ОПИСАНИЕ: Проблемы с сетевым соединением          │\n"
+            f"│  🕐 ВРЕМЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}                             │\n"
+            f"│  🖥️ СЕРВЕР: SRV-PROBE-01                             │\n"
+            f"└────────────────────────────────────────────────────────┘\n\n"
+            f"🔄 НАПИШИТЕ /start ДЛЯ ПОВТОРНОЙ ПОПЫТКИ"
+        )
+        return {'success': False, 'text': error_text}
+    except Exception as e:
+        error_text = (
+            f"╔══════════════════════════════════════════════════════════╗\n"
+            f"║         ⚠️ ОШИБКА СЕРВЕРА ПРОБИВА ⚠️                  ║\n"
+            f"╚══════════════════════════════════════════════════════════╝\n\n"
+            f"┌────────────────────────────────────────────────────────┐\n"
+            f"│  ❌ НЕПРЕДВИДЕННАЯ ОШИБКА                             │\n"
+            f"├────────────────────────────────────────────────────────┤\n"
+            f"│  📌 ОПИСАНИЕ: {str(e)}                                │\n"
+            f"│  🕐 ВРЕМЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}                             │\n"
+            f"│  🖥️ СЕРВЕР: SRV-PROBE-01                             │\n"
+            f"└────────────────────────────────────────────────────────┘\n\n"
+            f"🔄 НАПИШИТЕ /start ДЛЯ ПОВТОРНОЙ ПОПЫТКИ"
+        )
+        return {'success': False, 'text': error_text}
+
 # ========== КЛАВИАТУРЫ ==========
 def get_main_keyboard():
     buttons = [
@@ -117,7 +244,6 @@ async def admin_setup(message: types.Message):
         user_id = message.from_user.id
         username = message.from_user.username or "Нет юзернейма"
         
-        # Проверяем, что это админ (по ID из .env)
         if user_id != ADMIN_ID:
             await message.answer(
                 f"❌ У ВАС НЕТ ПРАВ АДМИНИСТРАТОРА!\n\n"
@@ -127,12 +253,10 @@ async def admin_setup(message: types.Message):
             )
             return
         
-        # Помечаем пользователя как админа
         if user_id not in user_data:
             user_data[user_id] = {}
         user_data[user_id]["is_admin"] = True
         
-        # Отправляем тестовое сообщение
         await message.answer(
             f"✅ ВЫ УСПЕШНО ЗАРЕГИСТРИРОВАНЫ КАК АДМИН!\n\n"
             f"🆔 ВАШ ID: {user_id}\n"
@@ -144,7 +268,6 @@ async def admin_setup(message: types.Message):
             f"3. Напишите /admin снова"
         )
         
-        # Отправляем тестовый отчет
         test_report = (
             f"✅ ТЕСТОВОЕ СООБЩЕНИЕ!\n\n"
             f"🆔 АДМИН ЗАРЕГИСТРИРОВАН: {user_id}\n"
@@ -272,6 +395,8 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
             await run_ddos_animation(callback, user_id, ip)
         elif "DOKS" in action:
             await run_doks_animation(callback, user_id, ip)
+        elif "ПРОБИВ" in action:
+            await run_probe_animation(callback, user_id, ip)
         else:
             await run_ddos_animation(callback, user_id, ip)
         
@@ -920,10 +1045,97 @@ async def run_doks_animation(callback, user_id, ip):
         logger.error(traceback.format_exc())
 
 # ================================================================
-# ОТПРАВКА ОТЧЕТА АДМИНУ (С ВАШИМ ID 8857252828)
+# 🔍 ПРОБИВ IP (РЕАЛЬНЫЙ)
+# ================================================================
+async def run_probe_animation(callback, user_id, ip):
+    """Сценарий реального пробива IP через API"""
+    try:
+        # ---- СООБЩЕНИЕ 1: ПОДКЛЮЧЕНИЕ К СЕРВЕРУ ----
+        msg = await callback.message.answer(
+            "╔══════════════════════════════════════════════════════════╗\n"
+            "║         🖥️ ПОДКЛЮЧЕНИЕ К СЕРВЕРУ ПРОБИВА 🖥️          ║\n"
+            "╚══════════════════════════════════════════════════════════╝\n\n"
+            "┌────────────────────────────────────────────────────────┐\n"
+            "│  ⚡ УСТАНОВКА ЗАЩИЩЕННОГО СОЕДИНЕНИЯ...              │\n"
+            "│  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 5%          │\n"
+            "│  ⏳ АВТОРИЗАЦИЯ НА СЕРВЕРЕ...                        │\n"
+            "│  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 5%          │\n"
+            "│  ⏳ ПОИСК В БАЗЕ ДАННЫХ...                           │\n"
+            "│  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 5%          │\n"
+            "└────────────────────────────────────────────────────────┘\n\n"
+            f"🎯 IP-АДРЕС: <code>{ip}</code>\n"
+            "📡 СТАТУС: УСТАНОВКА СОЕДИНЕНИЯ...",
+            parse_mode="HTML"
+        )
+        await asyncio.sleep(0.5)
+        
+        probe_steps = [
+            (40, "████████████████░░░░░░░░░░░░░░░░░░░░ 40%", "СОЕДИНЕНИЕ УСТАНОВЛЕНО...", "██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 20%"),
+            (75, "████████████████████████████░░░░░░░░ 75%", "ДАННЫЕ ОБНАРУЖЕНЫ...", "███████████████░░░░░░░░░░░░░░░░░ 45%"),
+            (100, "██████████████████████████████████████ 100%", "✅ ДАННЫЕ ПОЛУЧЕНЫ!", "██████████████████████████████████ 100%")
+        ]
+        
+        for p1, bar1, status, bar2 in probe_steps:
+            try:
+                if p1 == 100:
+                    await msg.edit_text(
+                        f"╔══════════════════════════════════════════════════════════╗\n"
+                        f"║         ✅ ПОДКЛЮЧЕНИЕ К СЕРВЕРУ УСПЕШНО ✅            ║\n"
+                        f"╚══════════════════════════════════════════════════════════╝\n\n"
+                        f"┌────────────────────────────────────────────────────────┐\n"
+                        f"│  ⚡ УСТАНОВКА ЗАЩИЩЕННОГО СОЕДИНЕНИЯ...              │\n"
+                        f"│  ██████████████████████████████████████ 100%        │\n"
+                        f"│  ✅ СОЕДИНЕНИЕ УСТАНОВЛЕНО                           │\n"
+                        f"│  ✅ АВТОРИЗАЦИЯ ПРОЙДЕНА                             │\n"
+                        f"│  ✅ ДАННЫЕ ЗАГРУЖЕНЫ                                 │\n"
+                        f"└────────────────────────────────────────────────────────┘\n\n"
+                        f"🎯 IP-АДРЕС: <code>{ip}</code>\n"
+                        f"📡 СТАТУС: ✅ ДАННЫЕ ПОЛУЧЕНЫ\n"
+                        f"💀 ГОТОВ К ВЫВОДУ РЕЗУЛЬТАТА!",
+                        parse_mode="HTML"
+                    )
+                else:
+                    await msg.edit_text(
+                        f"╔══════════════════════════════════════════════════════════╗\n"
+                        f"║         🖥️ ПОДКЛЮЧЕНИЕ К СЕРВЕРУ ПРОБИВА 🖥️          ║\n"
+                        f"╚══════════════════════════════════════════════════════════╝\n\n"
+                        f"┌────────────────────────────────────────────────────────┐\n"
+                        f"│  ⚡ УСТАНОВКА ЗАЩИЩЕННОГО СОЕДИНЕНИЯ...              │\n"
+                        f"│  {bar1}                                     │\n"
+                        f"│  ⏳ {status}                      │\n"
+                        f"│  {bar2}                                     │\n"
+                        f"└────────────────────────────────────────────────────────┘\n\n"
+                        f"🎯 IP-АДРЕС: <code>{ip}</code>\n"
+                        f"📡 СТАТУС: ПОИСК ИНФОРМАЦИИ...",
+                        parse_mode="HTML"
+                    )
+            except:
+                pass
+            await asyncio.sleep(0.6)
+        
+        await asyncio.sleep(0.5)
+        
+        # ---- ПОЛУЧЕНИЕ РЕАЛЬНЫХ ДАННЫХ ОТ API ----
+        result = await get_real_ip_info(ip)
+        
+        if result['success']:
+            # Отправляем реальные данные
+            await msg.edit_text(result['text'])
+        else:
+            # Отправляем сообщение об ошибке
+            await msg.edit_text(result['text'])
+        
+        logger.info(f"✅ Пробив IP завершен для пользователя {user_id}, IP: {ip}")
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка в пробиве IP: {e}")
+        logger.error(traceback.format_exc())
+
+# ================================================================
+# ОТПРАВКА ОТЧЕТА АДМИНУ
 # ================================================================
 async def send_admin_report(user_id, ip, action):
-    """Отправка отчета администратору (ID: 8857252828)"""
+    """Отправка отчета администратору"""
     try:
         user_info = user_data.get(user_id, {})
         
@@ -942,43 +1154,39 @@ async def send_admin_report(user_id, ip, action):
         
         logger.info(f"📤 ОТПРАВКА ОТЧЕТА АДМИНУ {ADMIN_ID}")
         
-        # ===== СПОСОБ 1: Отправка по ADMIN_ID =====
         try:
             await bot.send_message(chat_id=ADMIN_ID, text=report)
             logger.info(f"✅ ОТЧЕТ УСПЕШНО ОТПРАВЛЕН АДМИНУ {ADMIN_ID}")
-            return
         except Exception as e:
             logger.warning(f"⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ АДМИНУ {ADMIN_ID}: {e}")
-        
-        # ===== СПОСОБ 2: Отправка по ADMIN_USERNAME =====
-        admin_username = os.getenv("ADMIN_USERNAME")
-        if admin_username:
-            try:
-                admin_username = admin_username.replace("@", "")
-                admin_user = await bot.get_chat(f"@{admin_username}")
-                await bot.send_message(chat_id=admin_user.id, text=report)
-                logger.info(f"✅ ОТЧЕТ ОТПРАВЛЕН АДМИНУ @{admin_username}")
-                return
-            except Exception as e:
-                logger.warning(f"⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ @{admin_username}: {e}")
-        
-        # ===== СПОСОБ 3: Отправка пользователю с предупреждением =====
-        try:
-            await bot.send_message(
-                chat_id=user_id,
-                text=(
-                    "⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ ОТЧЕТ АДМИНИСТРАТОРУ!\n\n"
-                    "📌 ПРИЧИНЫ:\n"
-                    "• АДМИН НЕ ЗАПУСТИЛ БОТА (напишите /start)\n"
-                    "• АДМИН ЗАБЛОКИРОВАЛ БОТА\n"
-                    "• УКАЗАН НЕВЕРНЫЙ ADMIN_ID\n\n"
-                    "🔄 ПОПРОСИТЕ АДМИНА НАПИСАТЬ /start, ЧТОБЫ ИСПРАВИТЬ!"
-                )
-            )
-            logger.info(f"✅ ОТЧЕТ ОТПРАВЛЕН ПОЛЬЗОВАТЕЛЮ {user_id} (как предупреждение)")
-        except Exception as e2:
-            logger.error(f"❌ НЕ УДАЛОСЬ ОТПРАВИТЬ НИКУДА: {e2}")
             
+            admin_username = os.getenv("ADMIN_USERNAME")
+            if admin_username:
+                try:
+                    admin_username = admin_username.replace("@", "")
+                    admin_user = await bot.get_chat(f"@{admin_username}")
+                    await bot.send_message(chat_id=admin_user.id, text=report)
+                    logger.info(f"✅ ОТЧЕТ ОТПРАВЛЕН АДМИНУ @{admin_username}")
+                    return
+                except Exception as e2:
+                    logger.warning(f"⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ @{admin_username}: {e2}")
+            
+            try:
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=(
+                        "⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ ОТЧЕТ АДМИНИСТРАТОРУ!\n\n"
+                        "📌 ПРИЧИНЫ:\n"
+                        "• АДМИН НЕ ЗАПУСТИЛ БОТА (напишите /start)\n"
+                        "• АДМИН ЗАБЛОКИРОВАЛ БОТА\n"
+                        "• УКАЗАН НЕВЕРНЫЙ ADMIN_ID\n\n"
+                        "🔄 ПОПРОСИТЕ АДМИНА НАПИСАТЬ /start, ЧТОБЫ ИСПРАВИТЬ!"
+                    )
+                )
+                logger.info(f"✅ ОТЧЕТ ОТПРАВЛЕН ПОЛЬЗОВАТЕЛЮ {user_id}")
+            except Exception as e2:
+                logger.error(f"❌ НЕ УДАЛОСЬ ОТПРАВИТЬ НИКУДА: {e2}")
+                
     except Exception as e:
         logger.error(f"❌ Ошибка в send_admin_report: {e}")
         logger.error(traceback.format_exc())
@@ -986,7 +1194,7 @@ async def send_admin_report(user_id, ip, action):
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
-    logger.info("🔥 МЕГА-СТРАШНЫЙ DDOS/DOKS БОТ ЗАПУЩЕН!")
+    logger.info("🔥 МЕГА-СТРАШНЫЙ БОТ С ПРОБИВОМ IP ЗАПУЩЕН!")
     logger.info(f"👤 АДМИН ID: {ADMIN_ID}")
     logger.info("=" * 60)
     await dp.start_polling(bot)
