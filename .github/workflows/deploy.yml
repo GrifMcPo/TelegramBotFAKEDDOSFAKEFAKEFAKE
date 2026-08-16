@@ -1,0 +1,43 @@
+name: 🚀 Deploy DDOS Bot
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Debug mode'
+        required: false
+        default: 'false'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # Бот будет работать 6 часов, потом перезапустится
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+    
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: 📦 Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: 🔧 Create .env file
+      run: |
+        echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" >> .env
+        echo "ADMIN_ID=${{ secrets.ADMIN_ID }}" >> .env
+    
+    - name: 🤖 Run bot
+      run: |
+        python bot.py
+      env:
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        ADMIN_ID: ${{ secrets.ADMIN_ID }}
