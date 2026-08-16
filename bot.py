@@ -1,24 +1,34 @@
 import asyncio
 import logging
 import os
+import sys
 from datetime import datetime
-import random
-
+from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from dotenv import load_dotenv
 
+# ========== ЗАГРУЗКА ПЕРЕМЕННЫХ ==========
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", 8889631346))
+ADMIN_ID_STR = os.getenv("ADMIN_ID", "8889631346")
+
+try:
+    ADMIN_ID = int(ADMIN_ID_STR)
+except ValueError:
+    ADMIN_ID = 8889631346
 
 if not BOT_TOKEN:
-    raise ValueError("Токен не найден! Добавьте BOT_TOKEN в .env")
+    print("❌ КРИТИЧЕСКАЯ ОШИБКА: BOT_TOKEN не найден!")
+    sys.exit(1)
 
+print(f"✅ BOT_TOKEN загружен: {BOT_TOKEN[:15]}...")
+print(f"✅ ADMIN_ID: {ADMIN_ID}")
+
+# ========== ИНИЦИАЛИЗАЦИЯ ==========
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
@@ -125,7 +135,7 @@ async def process_ip(message: types.Message, state: FSMContext):
     
     await state.set_state(AttackStates.waiting_for_confirmation)
 
-# ========== ПОДТВЕРЖДЕНИЕ ==========
+# ========== АНИМАЦИЯ АТАКИ ==========
 @dp.callback_query(lambda c: c.data.startswith("confirm_"))
 async def handle_confirm(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
@@ -148,6 +158,7 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
         return
     
     # ========== ЗАПУСК АНИМАЦИИ ==========
+    ip = user_data[user_id]["ip"]
     
     # ---- СООБЩЕНИЕ №1: ИНИЦИАЛИЗАЦИЯ (2 сек) ----
     msg = await callback.message.answer(
@@ -185,10 +196,7 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
         )
         await asyncio.sleep(0.5)
     
-    # ---- СООБЩЕНИЕ №2: СБОР ИНФОРМАЦИИ (3 сек с процентами) ----
-    ip = user_data[user_id]["ip"]
-    
-    # Шаги процентов для сбора информации
+    # ---- СООБЩЕНИЕ №2: СБОР ИНФОРМАЦИИ (3 сек) ----
     info_steps = [
         (0, "██░░░░░░░░░░░░░░░░░░ 0%", "Определяется...", "Определяется...", "Сканируется...", "Сканируется...", "Сканируются..."),
         (15, "██████░░░░░░░░░░░░░░ 15%", "Определяется...", "Определяется...", "Сканируется...", "Сканируется...", "Сканируются..."),
@@ -236,8 +244,7 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
     
     await asyncio.sleep(0.5)
     
-    # ---- СООБЩЕНИЕ №3: ЗАГРУЗКА СИСТЕМ (5 сек с процентами) ----
-    # Шаги процентов для загрузки (каждый модуль отдельно)
+    # ---- СООБЩЕНИЕ №3: ЗАГРУЗКА СИСТЕМ (5 сек) ----
     load_steps = [
         (0, 0, 0, "⏳ Загрузка...", "⏳ Ожидание...", "⏳ Ожидание..."),
         (23, 0, 0, "⏳ Загрузка...", "⏳ Ожидание...", "⏳ Ожидание..."),
@@ -343,8 +350,7 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
     )
     await asyncio.sleep(0.5)
     
-    # ---- СООБЩЕНИЕ №5: ВОЛНА #1 (6 сек с живым счетчиком) ----
-    # Шаги для волны #1
+    # ---- СООБЩЕНИЕ №5: ВОЛНА #1 (6 сек) ----
     wave1_steps = [
         (0, 0, "0", "0.0", "ОЖИДАНИЕ ⏳", 0, 0),
         (17, 143829, "143,829", "0.4", "НИЗКАЯ 🟢", 1847, 47943),
@@ -400,7 +406,7 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
     
     await asyncio.sleep(0.5)
     
-    # ---- СООБЩЕНИЕ №6: ВОЛНА #2 (6 сек с живым счетчиком) ----
+    # ---- СООБЩЕНИЕ №6: ВОЛНА #2 (6 сек) ----
     wave2_steps = [
         (0, 0, "0", "0.0", "ОЖИДАНИЕ ⏳", 0, 0),
         (19, 321846, "321,846", "0.8", "СРЕДНЯЯ 🟡", 4231, 107282),
@@ -455,14 +461,14 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
     
     await asyncio.sleep(0.5)
     
-    # ---- СООБЩЕНИЕ №7: ВОЛНА #3 (6 сек с живым счетчиком) ----
+    # ---- СООБЩЕНИЕ №7: ВОЛНА #3 (6 сек) ----
     wave3_steps = [
         (0, 0, "0", "0.0", "ОЖИДАНИЕ ⏳", 0, 0),
-        (23, 654, "654,231", "1.2", "ВЫСОКАЯ 🔴", 6847, 218077),
-        (46, 1308, "1,308,462", "2.4", "КРИТИЧЕСКАЯ ⚠️", 12431, 436154),
-        (69, 1962, "1,962,693", "3.6", "МАКСИМАЛЬНАЯ 💀", 17843, 654231),
-        (88, 2505, "2,505,651", "4.8", "МАКСИМАЛЬНАЯ 💀", 23127, 835217),
-        (100, 2847, "2,847,331", "4.8", "МАКСИМАЛЬНАЯ 💀", 23127, 474555)
+        (23, 654231, "654,231", "1.2", "ВЫСОКАЯ 🔴", 6847, 218077),
+        (46, 1308462, "1,308,462", "2.4", "КРИТИЧЕСКАЯ ⚠️", 12431, 436154),
+        (69, 1962693, "1,962,693", "3.6", "МАКСИМАЛЬНАЯ 💀", 17843, 654231),
+        (88, 2505651, "2,505,651", "4.8", "МАКСИМАЛЬНАЯ 💀", 23127, 835217),
+        (100, 2847331, "2,847,331", "4.8", "МАКСИМАЛЬНАЯ 💀", 23127, 474555)
     ]
     
     for percent, packets, packets_str, speed, load, nodes, pps in wave3_steps:
@@ -572,6 +578,7 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
     
     try:
         await bot.send_message(chat_id=ADMIN_ID, text=report)
+        print(f"✅ Отчет отправлен админу {ADMIN_ID}")
     except Exception as e:
         print(f"❌ Не удалось отправить отчет админу: {e}")
     
@@ -580,10 +587,15 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
 
 # ========== ЗАПУСК ==========
 async def main():
-    logging.basicConfig(level=logging.INFO)
-    print("✅ БОТ ЗАПУЩЕН С ЖИВОЙ АНИМАЦИЕЙ ПРОЦЕНТОВ!")
+    print("🤖 БОТ ЗАПУЩЕН С ЖИВОЙ АНИМАЦИЕЙ ПРОЦЕНТОВ!")
     print(f"👤 АДМИН ID: {ADMIN_ID}")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("⏹️ Бот остановлен")
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
+        sys.exit(1)
