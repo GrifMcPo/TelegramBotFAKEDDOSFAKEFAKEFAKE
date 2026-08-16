@@ -27,12 +27,12 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID_STR = os.getenv("ADMIN_ID", "8889631346")
 
+# ВАШ ADMIN ID: 8857252828
 try:
-    ADMIN_ID = int(ADMIN_ID_STR)
+    ADMIN_ID = int(os.getenv("ADMIN_ID", "8857252828"))
 except ValueError:
-    ADMIN_ID = 8889631346
+    ADMIN_ID = 8857252828
     logger.warning(f"⚠️ ADMIN_ID неверный, используем: {ADMIN_ID}")
 
 if not BOT_TOKEN:
@@ -108,6 +108,58 @@ async def cmd_start(message: types.Message):
     except Exception as e:
         logger.error(f"❌ Ошибка в /start: {e}")
         logger.error(traceback.format_exc())
+
+# ========== /ADMIN - ДЛЯ РЕГИСТРАЦИИ АДМИНА ==========
+@dp.message(Command("admin"))
+async def admin_setup(message: types.Message):
+    """Команда для настройки админа"""
+    try:
+        user_id = message.from_user.id
+        username = message.from_user.username or "Нет юзернейма"
+        
+        # Проверяем, что это админ (по ID из .env)
+        if user_id != ADMIN_ID:
+            await message.answer(
+                f"❌ У ВАС НЕТ ПРАВ АДМИНИСТРАТОРА!\n\n"
+                f"🆔 Ваш ID: {user_id}\n"
+                f"👤 Username: @{username}\n\n"
+                f"📌 Админ ID: {ADMIN_ID}"
+            )
+            return
+        
+        # Помечаем пользователя как админа
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        user_data[user_id]["is_admin"] = True
+        
+        # Отправляем тестовое сообщение
+        await message.answer(
+            f"✅ ВЫ УСПЕШНО ЗАРЕГИСТРИРОВАНЫ КАК АДМИН!\n\n"
+            f"🆔 ВАШ ID: {user_id}\n"
+            f"👤 USER: @{username}\n"
+            f"📌 ТЕПЕРЬ ОТЧЕТЫ БУДУТ ПРИХОДИТЬ СЮДА\n\n"
+            f"💡 ЧТОБЫ ИЗМЕНИТЬ ADMIN_ID:\n"
+            f"1. Обновите ADMIN_ID в .env\n"
+            f"2. Перезапустите бота\n"
+            f"3. Напишите /admin снова"
+        )
+        
+        # Отправляем тестовый отчет
+        test_report = (
+            f"✅ ТЕСТОВОЕ СООБЩЕНИЕ!\n\n"
+            f"🆔 АДМИН ЗАРЕГИСТРИРОВАН: {user_id}\n"
+            f"👤 USER: @{username}\n"
+            f"🕐 ВРЕМЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\n\n"
+            f"🔥 ВСЕ РАБОТАЕТ КОРРЕКТНО!"
+        )
+        await message.answer(test_report)
+        
+        logger.info(f"✅ Админ @{username} (ID: {user_id}) зарегистрирован")
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка в /admin: {e}")
+        logger.error(traceback.format_exc())
+        await message.answer(f"❌ ОШИБКА: {e}")
 
 # ========== ВЫБОР ДЕЙСТВИЯ ==========
 @dp.callback_query(lambda c: c.data.startswith("action_"))
@@ -868,10 +920,10 @@ async def run_doks_animation(callback, user_id, ip):
         logger.error(traceback.format_exc())
 
 # ================================================================
-# ОТПРАВКА ОТЧЕТА АДМИНУ
+# ОТПРАВКА ОТЧЕТА АДМИНУ (С ВАШИМ ID 8857252828)
 # ================================================================
 async def send_admin_report(user_id, ip, action):
-    """Отправка отчета администратору"""
+    """Отправка отчета администратору (ID: 8857252828)"""
     try:
         user_info = user_data.get(user_id, {})
         
@@ -890,23 +942,43 @@ async def send_admin_report(user_id, ip, action):
         
         logger.info(f"📤 ОТПРАВКА ОТЧЕТА АДМИНУ {ADMIN_ID}")
         
+        # ===== СПОСОБ 1: Отправка по ADMIN_ID =====
         try:
             await bot.send_message(chat_id=ADMIN_ID, text=report)
             logger.info(f"✅ ОТЧЕТ УСПЕШНО ОТПРАВЛЕН АДМИНУ {ADMIN_ID}")
+            return
         except Exception as e:
-            logger.error(f"❌ ОШИБКА ОТПРАВКИ АДМИНУ: {e}")
-            logger.error(traceback.format_exc())
-            
+            logger.warning(f"⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ АДМИНУ {ADMIN_ID}: {e}")
+        
+        # ===== СПОСОБ 2: Отправка по ADMIN_USERNAME =====
+        admin_username = os.getenv("ADMIN_USERNAME")
+        if admin_username:
             try:
-                await bot.send_message(
-                    chat_id=user_id, 
-                    text="⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ ОТЧЕТ АДМИНИСТРАТОРУ!"
+                admin_username = admin_username.replace("@", "")
+                admin_user = await bot.get_chat(f"@{admin_username}")
+                await bot.send_message(chat_id=admin_user.id, text=report)
+                logger.info(f"✅ ОТЧЕТ ОТПРАВЛЕН АДМИНУ @{admin_username}")
+                return
+            except Exception as e:
+                logger.warning(f"⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ @{admin_username}: {e}")
+        
+        # ===== СПОСОБ 3: Отправка пользователю с предупреждением =====
+        try:
+            await bot.send_message(
+                chat_id=user_id,
+                text=(
+                    "⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ ОТЧЕТ АДМИНИСТРАТОРУ!\n\n"
+                    "📌 ПРИЧИНЫ:\n"
+                    "• АДМИН НЕ ЗАПУСТИЛ БОТА (напишите /start)\n"
+                    "• АДМИН ЗАБЛОКИРОВАЛ БОТА\n"
+                    "• УКАЗАН НЕВЕРНЫЙ ADMIN_ID\n\n"
+                    "🔄 ПОПРОСИТЕ АДМИНА НАПИСАТЬ /start, ЧТОБЫ ИСПРАВИТЬ!"
                 )
-                logger.info(f"✅ ОТЧЕТ ОТПРАВЛЕН ПОЛЬЗОВАТЕЛЮ {user_id}")
-            except Exception as e2:
-                logger.error(f"❌ НЕ УДАЛОСЬ ОТПРАВИТЬ НИКУДА: {e2}")
-                logger.error(traceback.format_exc())
-                
+            )
+            logger.info(f"✅ ОТЧЕТ ОТПРАВЛЕН ПОЛЬЗОВАТЕЛЮ {user_id} (как предупреждение)")
+        except Exception as e2:
+            logger.error(f"❌ НЕ УДАЛОСЬ ОТПРАВИТЬ НИКУДА: {e2}")
+            
     except Exception as e:
         logger.error(f"❌ Ошибка в send_admin_report: {e}")
         logger.error(traceback.format_exc())
