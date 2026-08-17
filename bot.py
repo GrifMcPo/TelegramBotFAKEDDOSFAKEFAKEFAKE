@@ -4,6 +4,8 @@ import sys
 import logging
 import re
 import requests
+import phonenumbers
+from phonenumbers import carrier, geocoder, timezone
 from datetime import datetime
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
@@ -63,6 +65,42 @@ async def get_ip_info(ip: str):
     except Exception as e:
         return {'success': False, 'text': f"❌ Ошибка: {str(e)}"}
 
+# ========== ФУНКЦИЯ ДЛЯ ПРОБИВА НОМЕРА ==========
+async def get_phone_info(phone: str):
+    try:
+        phone_clean = phone.replace('+', '').replace('-', '').replace('(', '').replace(')', '').replace(' ', '')
+        
+        if not phone_clean.isdigit():
+            return {'success': False, 'text': "❌ Некорректный номер\n📌 Пример: 89001234567"}
+        
+        try:
+            parsed = phonenumbers.parse(phone_clean, None)
+            if not phonenumbers.is_valid_number(parsed):
+                return {'success': False, 'text': "❌ Номер не существует"}
+        except:
+            try:
+                parsed = phonenumbers.parse(phone_clean, "RU")
+                if not phonenumbers.is_valid_number(parsed):
+                    return {'success': False, 'text': "❌ Номер не существует"}
+            except:
+                return {'success': False, 'text': "❌ Некорректный номер"}
+        
+        operator = carrier.name_for_number(parsed, "ru") or "Не определен"
+        region = geocoder.description_for_number(parsed, "ru") or "Не определен"
+        formatted = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
+        
+        info_text = (
+            f"✅ ИНФОРМАЦИЯ О НОМЕРЕ\n\n"
+            f"📱 Номер: {formatted}\n"
+            f"📡 Оператор: {operator}\n"
+            f"🌍 Регион: {region}\n"
+            f"🏙️ Город регистрации: {region.split()[0] if region else 'Не определен'}"
+        )
+        return {'success': True, 'text': info_text}
+        
+    except Exception as e:
+        return {'success': False, 'text': f"❌ Ошибка: {str(e)}"}
+
 # ========== ОТПРАВКА В БИЗНЕС-ЧАТ ==========
 async def send_business_message(chat_id: int, text: str, connection_id: str = None):
     try:
@@ -105,7 +143,73 @@ async def handle_business_message(message: types.Message):
         connection_id = message.business_connection_id
 
         # ============================================================
-        # КОМАНДА .ping - ПРОСТО ОТВЕЧАЕТ СРАЗУ
+        # КОМАНДА .inf - СПРАВКА
+        # ============================================================
+        if text.lower() == '.inf':
+            logger.info("🎯 .inf")
+            
+            await send_business_message(
+                chat_id=chat_id,
+                text=(
+                    "📚 СПРАВКА ПО КОМАНДАМ\n\n"
+                    "👤 Твоя подписка: LEADER\n\n"
+                    "📌 Формат: .команда - описание\n\n"
+                    "🐢 ПРОБИВ\n"
+                    "────────────────────\n"
+                    ".whois ip [IP] - Пробив по IP-адресу\n"
+                    ".whois number [НОМЕР] - Пробив по номеру телефона\n\n"
+                    "⚡ ДРУГОЕ\n"
+                    "────────────────────\n"
+                    ".ping - Проверка работы бота\n"
+                    ".inf - Эта справка"
+                ),
+                connection_id=connection_id
+            )
+            return
+
+        # ============================================================
+        # КОМАНДА .whois ip - ПРОБИВ ПО IP
+        # ============================================================
+        if text.lower().startswith('.whois ip'):
+            logger.info("🎯 .whois ip")
+            
+            ip = text.replace('.whois ip', '').strip()
+            
+            if not ip:
+                await send_business_message(chat_id, "❌ Введите IP-адрес\n📌 Пример: .whois ip 8.8.8.8", connection_id)
+                return
+            
+            ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+            if not re.match(ip_pattern, ip):
+                await send_business_message(chat_id, f"❌ Некорректный IP: {ip}\n📌 Пример: 8.8.8.8", connection_id)
+                return
+            
+            result = await get_ip_info(ip)
+            await send_business_message(chat_id, result['text'] if result['success'] else f"❌ Ошибка: {result['text']}", connection_id)
+            
+            logger.info(f"✅ IP {ip} проверен")
+            return
+
+        # ============================================================
+        # КОМАНДА .whois number - ПРОБИВ ПО НОМЕРУ
+        # ============================================================
+        if text.lower().startswith('.whois number'):
+            logger.info("🎯 .whois number")
+            
+            phone = text.replace('.whois number', '').strip()
+            
+            if not phone:
+                await send_business_message(chat_id, "❌ Введите номер телефона\n📌 Пример: .whois number 89001234567", connection_id)
+                return
+            
+            result = await get_phone_info(phone)
+            await send_business_message(chat_id, result['text'] if result['success'] else f"❌ Ошибка: {result['text']}", connection_id)
+            
+            logger.info(f"✅ Номер {phone} проверен")
+            return
+
+        # ============================================================
+        # КОМАНДА .ping
         # ============================================================
         if text.lower() == '.ping':
             logger.info("🎯 .ping")
@@ -117,53 +221,6 @@ async def handle_business_message(message: types.Message):
             )
             
             logger.info("✅ Ответ отправлен")
-            return
-
-        # ============================================================
-        # КОМАНДА .whois - ПОКА ПРОСТО ЗАГЛУШКА
-        # ============================================================
-        if text.lower().startswith('.whois'):
-            logger.info("🎯 .whois")
-            
-            ip = text.replace('.whois', '').strip()
-            
-            if not ip:
-                await send_business_message(chat_id, "❌ Введите IP\nПример: .whois 8.8.8.8", connection_id)
-                return
-            
-            ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
-            if not re.match(ip_pattern, ip):
-                await send_business_message(chat_id, f"❌ Некорректный IP: {ip}", connection_id)
-                return
-            
-            # ПОЛУЧАЕМ ДАННЫЕ И СРАЗУ ОТВЕЧАЕМ
-            result = await get_ip_info(ip)
-            
-            await send_business_message(
-                chat_id=chat_id,
-                text=result['text'] if result['success'] else f"❌ Ошибка: {result['text']}",
-                connection_id=connection_id
-            )
-            
-            logger.info(f"✅ IP {ip} проверен")
-            return
-
-        # ============================================================
-        # КОМАНДА .help
-        # ============================================================
-        if text.lower() == '.help':
-            logger.info("🎯 .help")
-            await send_business_message(
-                chat_id=chat_id,
-                text=(
-                    "🤖 ДОСТУПНЫЕ КОМАНДЫ\n\n"
-                    ".whois IP - информация об IP\n"
-                    ".help - помощь\n"
-                    ".ping - проверка\n"
-                    "/chatid - ID чата"
-                ),
-                connection_id=connection_id
-            )
             return
 
         # ============================================================
@@ -196,20 +253,19 @@ async def handle_business_message(message: types.Message):
 async def start_command(message: types.Message):
     await message.answer(
         "🤖 БОТ ДЛЯ БИЗНЕС-ЧАТОВ\n\n"
+        "📌 Введи .inf для справки\n\n"
         "📌 КОМАНДЫ:\n"
-        ".whois IP - информация об IP\n"
-        ".help - помощь\n"
+        ".whois ip [IP] - пробив по IP\n"
+        ".whois number [НОМЕР] - пробив по номеру\n"
         ".ping - проверка\n"
-        "/chatid - ID чата\n\n"
-        "🔥 Бот просто отвечает в чат!"
+        ".inf - справка"
     )
 
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info("📌 Бот просто отвечает в бизнес-чат")
-    logger.info("📌 Без загрузок, без редактирования")
+    logger.info("📌 Команды: .inf, .whois ip, .whois number, .ping")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
