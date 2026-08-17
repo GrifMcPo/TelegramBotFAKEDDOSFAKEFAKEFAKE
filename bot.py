@@ -63,11 +63,13 @@ async def get_ip_info(ip: str):
     except Exception as e:
         return {'success': False, 'text': f"❌ Ошибка: {str(e)}"}
 
-# ========== БЕЗОПАСНОЕ УДАЛЕНИЕ ==========
-async def safe_delete(chat_id: int, message_id: int):
+# ========== УДАЛЕНИЕ С ЗАДЕРЖКОЙ ==========
+async def delete_after_delay(chat_id: int, message_id: int, delay: float = 0.5):
+    """Удаляет сообщение через задержку, чтобы избежать ошибок"""
+    await asyncio.sleep(delay)
     try:
         await bot.delete_message(chat_id=chat_id, message_id=message_id)
-        logger.info(f"🗑️ Сообщение {message_id} удалено из чата {chat_id}")
+        logger.info(f"🗑️ Сообщение {message_id} удалено")
         return True
     except Exception as e:
         logger.warning(f"⚠️ Не удалось удалить: {e}")
@@ -95,7 +97,6 @@ async def handle_business_connection(connection: BusinessConnection):
     logger.info("🔗 ПОДКЛЮЧЕНИЕ К БИЗНЕС-АККАУНТУ!")
     logger.info(f"📌 ID подключения: {connection.id}")
     logger.info(f"📌 Пользователь: @{connection.user.username if connection.user else 'Нет'}")
-    logger.info(f"📌 Может отвечать: {connection.can_reply}")
     logger.info("=" * 60)
 
 # ========== ОСНОВНОЙ ОБРАБОТЧИК ==========
@@ -107,7 +108,6 @@ async def handle_business_message(message: types.Message):
         logger.info(f"📌 ОТ: @{message.from_user.username or 'Нет'}")
         logger.info(f"📌 ТЕКСТ: {message.text}")
         logger.info(f"📌 ID СООБЩЕНИЯ: {message.message_id}")
-        logger.info(f"📌 ID ЧАТА: {message.chat.id}")
         logger.info("=" * 60)
 
         if not message.text:
@@ -119,58 +119,59 @@ async def handle_business_message(message: types.Message):
         connection_id = message.business_connection_id
 
         # ============================================================
-        # КОМАНДА .ping
+        # КОМАНДА .ping - СНАЧАЛА ОТВЕЧАЕМ, ПОТОМ УДАЛЯЕМ
         # ============================================================
         if text.lower() == '.ping':
-            logger.info("🎯 .ping - УДАЛЯЮ И ОТВЕЧАЮ")
+            logger.info("🎯 .ping")
             
-            # ПЫТАЕМСЯ УДАЛИТЬ
-            deleted = await safe_delete(chat_id, message_id)
-            
-            # ОТВЕЧАЕМ
+            # 1. СНАЧАЛА ОТВЕЧАЕМ
             await send_business_message(
                 chat_id=chat_id,
                 text=f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}",
                 connection_id=connection_id
             )
             
-            logger.info(f"✅ Готово! Удалено: {deleted}")
+            # 2. ПОТОМ УДАЛЯЕМ КОМАНДУ (через 0.5 сек)
+            asyncio.create_task(delete_after_delay(chat_id, message_id, 0.5))
+            
+            logger.info("✅ Ответ отправлен, команда будет удалена")
             return
 
         # ============================================================
         # КОМАНДА .whois
         # ============================================================
         if text.lower().startswith('.whois'):
-            logger.info("🎯 .whois - УДАЛЯЮ И ОТВЕЧАЮ")
+            logger.info("🎯 .whois")
             
             ip = text.replace('.whois', '').strip()
             
             if not ip:
-                await safe_delete(chat_id, message_id)
                 await send_business_message(chat_id, "❌ Введите IP\nПример: .whois 8.8.8.8", connection_id)
+                asyncio.create_task(delete_after_delay(chat_id, message_id, 0.5))
                 return
             
             ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
             if not re.match(ip_pattern, ip):
-                await safe_delete(chat_id, message_id)
                 await send_business_message(chat_id, f"❌ Некорректный IP: {ip}", connection_id)
+                asyncio.create_task(delete_after_delay(chat_id, message_id, 0.5))
                 return
             
-            # УДАЛЯЕМ КОМАНДУ
-            await safe_delete(chat_id, message_id)
-            
-            # ОТПРАВЛЯЕМ ЗАГРУЗКУ
+            # 1. ОТПРАВЛЯЕМ ЗАГРУЗКУ
             loading = await send_business_message(
                 chat_id=chat_id,
                 text=f"🔍 Поиск информации об IP {ip}...",
                 connection_id=connection_id
             )
             
+            # 2. УДАЛЯЕМ КОМАНДУ
+            asyncio.create_task(delete_after_delay(chat_id, message_id, 0.5))
+            
+            # 3. ПОЛУЧАЕМ ДАННЫЕ И РЕДАКТИРУЕМ
             if loading:
                 result = await get_ip_info(ip)
                 await loading.edit_text(result['text'])
             
-            logger.info(f"✅ IP {ip} проверен")
+            logger.info(f"✅ IP {ip} проверен, команда удалена")
             return
 
         # ============================================================
@@ -178,7 +179,7 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         if text.lower() == '.help':
             logger.info("🎯 .help")
-            await safe_delete(chat_id, message_id)
+            
             await send_business_message(
                 chat_id=chat_id,
                 text=(
@@ -190,6 +191,8 @@ async def handle_business_message(message: types.Message):
                 ),
                 connection_id=connection_id
             )
+            
+            asyncio.create_task(delete_after_delay(chat_id, message_id, 0.5))
             return
 
         # ============================================================
@@ -197,7 +200,7 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         if text.lower() == '/chatid':
             logger.info("🎯 /chatid")
-            await safe_delete(chat_id, message_id)
+            
             await send_business_message(
                 chat_id=chat_id,
                 text=(
@@ -209,6 +212,8 @@ async def handle_business_message(message: types.Message):
                 ),
                 connection_id=connection_id
             )
+            
+            asyncio.create_task(delete_after_delay(chat_id, message_id, 0.5))
             return
 
         logger.info(f"⏭️ НЕ РАСПОЗНАНА: {text}")
@@ -228,14 +233,14 @@ async def start_command(message: types.Message):
         ".help - помощь\n"
         ".ping - проверка\n"
         "/chatid - ID чата\n\n"
-        "🔥 Бот удаляет команды и отвечает в тот же чат!"
+        "🔥 Бот отвечает и УДАЛЯЕТ твою команду!"
     )
 
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info("📌 Бот УДАЛЯЕТ команды и отвечает в бизнес-чат")
+    logger.info("📌 Бот отвечает в бизнес-чат и УДАЛЯЕТ команды")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
