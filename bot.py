@@ -67,7 +67,7 @@ async def get_ip_info(ip: str):
 async def safe_delete(chat_id: int, message_id: int):
     try:
         await bot.delete_message(chat_id=chat_id, message_id=message_id)
-        logger.info(f"🗑️ Сообщение удалено")
+        logger.info(f"🗑️ Сообщение удалено из чата {chat_id}")
         return True
     except Exception as e:
         logger.debug(f"⚠️ Не удалось удалить: {e}")
@@ -91,31 +91,32 @@ async def handle_business_message(message: types.Message):
         logger.info("📩 НОВОЕ СООБЩЕНИЕ ИЗ ЛИЧНОГО ЧАТА")
         logger.info(f"📌 ОТ: @{message.from_user.username or 'Нет'}")
         logger.info(f"📌 ТЕКСТ: {message.text}")
+        logger.info(f"📌 ID ЧАТА (куда отвечать): {message.chat.id}")
         logger.info("=" * 60)
 
         if not message.text:
             return
 
         text = message.text
-        chat_id = message.chat.id
+        chat_id = message.chat.id  # ЭТО ID ЧАТА С СОБЕСЕДНИКОМ!
         message_id = message.message_id
 
         # ============================================================
-        # КОМАНДА .ping - УДАЛЯЕТ ТВОЁ СООБЩЕНИЕ И ОТВЕЧАЕТ
+        # КОМАНДА .ping
         # ============================================================
         if text.lower() == '.ping':
             logger.info("🎯 .ping")
             
-            # Удаляем твоё сообщение
+            # Удаляем твоё сообщение из чата
             await safe_delete(chat_id, message_id)
             
-            # Отправляем ответ от бота
+            # Отправляем ответ В ТОТ ЖЕ ЧАТ (chat_id)
             await bot.send_message(
                 chat_id=chat_id,
                 text=f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}"
             )
             
-            logger.info("✅ Ответ отправлен")
+            logger.info(f"✅ Ответ отправлен в чат {chat_id}")
             return
 
         # ============================================================
@@ -140,7 +141,7 @@ async def handle_business_message(message: types.Message):
             # Удаляем твоё сообщение
             await safe_delete(chat_id, message_id)
             
-            # Отправляем "загрузку"
+            # Отправляем "загрузку" В ТОТ ЖЕ ЧАТ
             loading = await bot.send_message(
                 chat_id=chat_id,
                 text=f"🔍 Поиск информации об IP {ip}..."
@@ -149,10 +150,10 @@ async def handle_business_message(message: types.Message):
             # Получаем данные
             result = await get_ip_info(ip)
             
-            # Редактируем СВОЁ сообщение (бот может редактировать свои)
+            # Редактируем СВОЁ сообщение
             await loading.edit_text(result['text'])
             
-            logger.info(f"✅ IP {ip} проверен")
+            logger.info(f"✅ IP {ip} проверен в чате {chat_id}")
             return
 
         # ============================================================
@@ -169,7 +170,7 @@ async def handle_business_message(message: types.Message):
                     ".help - помощь\n"
                     ".ping - проверка\n"
                     "/chatid - ID чата\n\n"
-                    "🔥 Бот удаляет команды и отвечает!"
+                    "🔥 Бот удаляет команды и отвечает в этот же чат!"
                 )
             )
             return
@@ -204,19 +205,19 @@ async def handle_business_message(message: types.Message):
 async def start_command(message: types.Message):
     await message.answer(
         "🤖 БОТ ДЛЯ ЛИЧНЫХ ЧАТОВ\n\n"
-        "📌 КОМАНДЫ:\n"
+        "📌 КОМАНДЫ РАБОТАЮТ В ЧАТЕ С СОБЕСЕДНИКОМ:\n"
         ".whois IP - информация об IP\n"
         ".help - помощь\n"
         ".ping - проверка\n"
         "/chatid - ID чата\n\n"
-        "🔥 Бот удаляет твои команды и отвечает!"
+        "🔥 Бот удаляет команды и отвечает в тот же чат!"
     )
 
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info("📌 Бот УДАЛЯЕТ команды и ОТВЕЧАЕТ")
+    logger.info("📌 Бот отвечает В ТОТ ЖЕ ЧАТ, где была команда")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
