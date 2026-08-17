@@ -35,8 +35,8 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ========== ХРАНИЛИЩЕ ==========
-spam_active = {}
+# ========== ХРАНИЛИЩЕ ДЛЯ МУТА ==========
+muted_chats = {}  # {chat_id: True} — чаты в муте
 
 # ========== ТВОИ ОСКОРБЛЕНИЯ ==========
 INSULTS = [
@@ -175,13 +175,9 @@ async def handle_callback(callback: types.CallbackQuery):
         data = callback.data
         chat_id = callback.message.chat.id
         message_id = callback.message.message_id
-        user_id = callback.from_user.id
         
         logger.info(f"🎯 Нажата кнопка: {data} от @{callback.from_user.username}")
         
-        # ============================================================
-        # КНОПКА: ТРОЛЛИНГ СПАМ
-        # ============================================================
         if data == "spam_troll":
             await safe_delete(chat_id, message_id)
             
@@ -205,9 +201,6 @@ async def handle_callback(callback: types.CallbackQuery):
             await callback.answer()
             return
         
-        # ============================================================
-        # КНОПКИ: В РАЗРАБОТКЕ
-        # ============================================================
         if data in ["spam_dev", "spam_dev2"]:
             await callback.answer("⏳ Функция в разработке!", show_alert=True)
             return
@@ -225,6 +218,7 @@ async def handle_business_message(message: types.Message):
         logger.info("📩 НОВОЕ СООБЩЕНИЕ ИЗ БИЗНЕС-ЧАТА")
         logger.info(f"📌 ОТ: @{message.from_user.username or 'Нет'}")
         logger.info(f"📌 ТЕКСТ: {message.text}")
+        logger.info(f"📌 ID ЧАТА: {message.chat.id}")
         logger.info("=" * 60)
 
         if not message.text:
@@ -232,10 +226,12 @@ async def handle_business_message(message: types.Message):
 
         text = message.text
         chat_id = message.chat.id
+        message_id = message.message_id
         connection_id = message.business_connection_id
+        user_id = message.from_user.id
 
         # ============================================================
-        # КОМАНДА .inf - СПРАВКА
+        # .inf - СПРАВКА
         # ============================================================
         if text.lower() == '.inf':
             logger.info("🎯 .inf")
@@ -251,6 +247,10 @@ async def handle_business_message(message: types.Message):
                     "> .whois ip [IP] - Пробив по IP-адресу\n"
                     "> .whois number [НОМЕР] - Пробив по номеру телефона\n\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "🔇 МУТ\n\n"
+                    "> .mute - Включить мут (удалять сообщения собеседника)\n"
+                    "> .unmute - Выключить мут\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     "🔥 СПАМ\n\n"
                     "> .spam [Кол-во] [Текст] - Спам вашим сообщением\n"
                     "> .spams - Открыть спам-меню\n\n"
@@ -264,12 +264,55 @@ async def handle_business_message(message: types.Message):
             return
 
         # ============================================================
-        # КОМАНДА .spam [КОЛ-ВО] [ТЕКСТ]
+        # .mute - ВКЛЮЧИТЬ МУТ
+        # ============================================================
+        if text.lower() == '.mute':
+            logger.info("🎯 .mute")
+            
+            muted_chats[chat_id] = True
+            
+            await send_business_message(
+                chat_id=chat_id,
+                text=(
+                    "🔇 Мут включен!\n\n"
+                    "📌 Собеседник теперь не может писать в этот чат.\n"
+                    "📌 Все его сообщения будут удаляться.\n"
+                    "📌 Для выключения напишите .unmute"
+                ),
+                connection_id=connection_id
+            )
+            
+            logger.info(f"✅ Мут включен в чате {chat_id}")
+            return
+
+        # ============================================================
+        # .unmute - ВЫКЛЮЧИТЬ МУТ
+        # ============================================================
+        if text.lower() == '.unmute':
+            logger.info("🎯 .unmute")
+            
+            if chat_id in muted_chats:
+                del muted_chats[chat_id]
+            
+            await send_business_message(
+                chat_id=chat_id,
+                text=(
+                    "🔊 Мут выключен!\n\n"
+                    "📌 Собеседник снова может писать в чат.\n"
+                    "📌 Его сообщения больше не будут удаляться."
+                ),
+                connection_id=connection_id
+            )
+            
+            logger.info(f"✅ Мут выключен в чате {chat_id}")
+            return
+
+        # ============================================================
+        # .spam [КОЛ-ВО] [ТЕКСТ]
         # ============================================================
         if text.lower().startswith('.spam') and not text.lower().startswith('.spams'):
             logger.info("🎯 .spam")
             
-            # Разбираем команду: .spam 5 Привет
             parts = text.split(maxsplit=2)
             
             if len(parts) < 3:
@@ -302,21 +345,19 @@ async def handle_business_message(message: types.Message):
                 await send_business_message(chat_id, "❌ Максимум 100 сообщений за раз!", connection_id)
                 return
             
-            # Отправляем сообщение о начале спама
             await send_business_message(
                 chat_id=chat_id,
                 text=f"🔥 Начинаю спам!\n📊 {count} сообщений\n📝 Текст: {spam_text}",
                 connection_id=connection_id
             )
             
-            # Отправляем спам
             for i in range(1, count + 1):
                 await send_business_message(
                     chat_id=chat_id,
                     text=f"{i}. {spam_text}",
                     connection_id=connection_id
                 )
-                await asyncio.sleep(0.3)  # Задержка между сообщениями
+                await asyncio.sleep(0.3)
             
             await send_business_message(
                 chat_id=chat_id,
@@ -328,7 +369,7 @@ async def handle_business_message(message: types.Message):
             return
 
         # ============================================================
-        # КОМАНДА .spams - СПАМ-МЕНЮ
+        # .spams - СПАМ-МЕНЮ
         # ============================================================
         if text.lower() == '.spams':
             logger.info("🎯 .spams")
@@ -345,7 +386,7 @@ async def handle_business_message(message: types.Message):
             return
 
         # ============================================================
-        # КОМАНДА .whois
+        # .whois
         # ============================================================
         if text.lower().startswith('.whois'):
             logger.info("🎯 .whois")
@@ -396,7 +437,7 @@ async def handle_business_message(message: types.Message):
             return
 
         # ============================================================
-        # КОМАНДА .ping
+        # .ping
         # ============================================================
         if text.lower() == '.ping':
             logger.info("🎯 .ping")
@@ -411,7 +452,7 @@ async def handle_business_message(message: types.Message):
             return
 
         # ============================================================
-        # КОМАНДА /chatid
+        # /chatid
         # ============================================================
         if text.lower() == '/chatid':
             logger.info("🎯 /chatid")
@@ -428,6 +469,25 @@ async def handle_business_message(message: types.Message):
             )
             return
 
+        # ============================================================
+        # ЕСЛИ ВКЛЮЧЕН МУТ — УДАЛЯЕМ ВСЕ СООБЩЕНИЯ СОБЕСЕДНИКА
+        # ============================================================
+        # Проверяем: если чат в муте И сообщение НЕ от команды (.mute, .unmute и т.д.)
+        if chat_id in muted_chats:
+            # Не удаляем сообщения от самого бота
+            if message.from_user.id == (await bot.get_me()).id:
+                return
+            
+            # Проверяем, что это не команда от пользователя (чтобы не удалять .unmute)
+            if text.startswith('.'):
+                return
+            
+            # Удаляем сообщение собеседника
+            await safe_delete(chat_id, message_id)
+            logger.info(f"🗑️ Удалено сообщение собеседника в замученном чате {chat_id}")
+            return
+
+        # Если команда не распознана
         logger.info(f"⏭️ НЕ РАСПОЗНАНА: {text}")
 
     except Exception as e:
@@ -444,7 +504,9 @@ async def start_command(message: types.Message):
         "📌 КОМАНДЫ:\n"
         ".whois ip [IP] - пробив по IP\n"
         ".whois number [НОМЕР] - пробив по номеру\n"
-        ".spam [Кол-во] [Текст] - спам вашим текстом\n"
+        ".mute - включить мут\n"
+        ".unmute - выключить мут\n"
+        ".spam [Кол-во] [Текст] - спам\n"
         ".spams - спам-меню\n"
         ".ping - проверка\n"
         ".inf - справка"
@@ -454,7 +516,7 @@ async def start_command(message: types.Message):
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info("📌 Команды: .inf, .whois, .spam, .spams, .ping")
+    logger.info("📌 Команды: .inf, .whois, .mute, .unmute, .spam, .spams, .ping")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
