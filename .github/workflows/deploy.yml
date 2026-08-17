@@ -1,4 +1,4 @@
-name: 🚀 Deploy DDOS Bot
+name: 🚀 Deploy Business Bot
 
 on:
   push:
@@ -29,6 +29,7 @@ jobs:
         echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" >> .env
         echo "ADMIN_ID=${{ secrets.ADMIN_ID }}" >> .env
         echo "✅ .env created"
+        cat .env | sed 's/BOT_TOKEN=.*/BOT_TOKEN=***СКРЫТО***/'
     
     - name: 🤖 Run bot
       run: python bot.py
