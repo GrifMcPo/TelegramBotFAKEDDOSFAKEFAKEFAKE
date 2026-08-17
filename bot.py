@@ -51,7 +51,7 @@ dp = Dispatcher()
 
 # ========== СОСТОЯНИЯ ==========
 class AttackStates(StatesGroup):
-    waiting_for_ip = State()
+    waiting_for_input = State()
     waiting_for_confirmation = State()
 
 # ========== ХРАНИЛИЩЕ ==========
@@ -137,7 +137,6 @@ async def get_real_ip_info(ip: str):
 # ========== ФУНКЦИЯ ДЛЯ РЕАЛЬНОГО ПРОБИВА НОМЕРА ==========
 async def get_phone_info(phone: str):
     try:
-        # Очищаем номер от лишних символов
         phone_clean = phone.replace('+', '').replace('-', '').replace('(', '').replace(')', '').replace(' ', '')
         
         if not phone_clean.isdigit():
@@ -152,7 +151,6 @@ async def get_phone_info(phone: str):
             )
             return {'success': False, 'text': error_text}
         
-        # Парсим номер
         try:
             parsed = phonenumbers.parse(phone_clean, None)
             if not phonenumbers.is_valid_number(parsed):
@@ -163,7 +161,6 @@ async def get_phone_info(phone: str):
                 )
                 return {'success': False, 'text': error_text}
         except:
-            # Пробуем с кодом России
             try:
                 parsed = phonenumbers.parse(phone_clean, "RU")
                 if not phonenumbers.is_valid_number(parsed):
@@ -181,46 +178,44 @@ async def get_phone_info(phone: str):
                 )
                 return {'success': False, 'text': error_text}
         
-        # Получаем данные
         operator = carrier.name_for_number(parsed, "ru") or "Не определен"
         region = geocoder.description_for_number(parsed, "ru") or "Не определен"
-        timezone_info = timezone.time_zones_for_number(parsed)
         
-        # Форматируем номер
         formatted_number = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
-        national_number = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.NATIONAL)
         
-        # Генерируем случайные дополнительные данные (для реалистичности)
-        import random
+        first_names = ['АЛЕКСАНДР', 'СЕРГЕЙ', 'ДМИТРИЙ', 'АЛЕКСЕЙ', 'МИХАИЛ', 'ВЛАДИМИР', 'ЕКАТЕРИНА', 'АННА', 'МАРИЯ', 'ЕЛЕНА', 'ОЛЬГА', 'ТАТЬЯНА']
+        last_names = ['ИВАНОВ', 'СМИРНОВ', 'КУЗНЕЦОВ', 'ПОПОВ', 'ВАСИЛЬЕВ', 'ПЕТРОВ', 'СОКОЛОВ', 'МИХАЙЛОВ', 'ФЕДОРОВ', 'МОРОЗОВ']
+        middle_names = ['ИВАНОВИЧ', 'СЕРГЕЕВИЧ', 'АЛЕКСАНДРОВИЧ', 'ДМИТРИЕВИЧ', 'ВЛАДИМИРОВИЧ', 'АЛЕКСЕЕВИЧ', 'МИХАЙЛОВИЧ', 'ПЕТРОВИЧ']
+        
+        name = f"{random.choice(last_names)} {random.choice(first_names)} {random.choice(middle_names)}"
+        
+        cities = ['Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург', 'Казань', 'Нижний Новгород', 'Челябинск', 'Самара', 'Омск', 'Ростов-на-Дону']
+        registration_city = random.choice(cities)
+        
         activity_statuses = ["АКТИВЕН", "АКТИВЕН", "АКТИВЕН", "НЕАКТИВЕН", "В РОМИНГЕ"]
-        trust_levels = ["ВЫСОКИЙ", "ВЫСОКИЙ", "СРЕДНИЙ", "ВЫСОКИЙ", "НИЗКИЙ"]
         
         info_text = (
             f"📊 РЕЗУЛЬТАТ ПРОБИВА НОМЕРА\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"📱 ОСНОВНАЯ ИНФОРМАЦИЯ\n"
             f"📱 Номер: {formatted_number}\n"
-            f"📱 Национальный: {national_number}\n"
             f"📡 Оператор: {operator}\n"
             f"🌍 Регион: {region}\n"
-            f"⏰ Часовой пояс: {', '.join(timezone_info) if timezone_info else 'Не определен'}\n"
-            f"🔄 Статус: {random.choice(activity_statuses)}\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"🔍 ДОПОЛНИТЕЛЬНЫЕ ДАННЫЕ\n"
-            f"📊 Тип: Мобильный\n"
-            f"🔄 Смена оператора: {'Нет' if random.random() > 0.3 else 'Была'}\n"
-            f"📍 Последняя активность: {datetime.now().strftime('Сегодня, %H:%M')}\n"
-            f"🔋 Батарея: {random.randint(70, 100)}% (данные с устройства)\n\n"
+            f"🏙️ Город регистрации: {registration_city}\n"
+            f"👤 Владелец: {name}\n"
+            f"📅 Дата регистрации: {random.randint(1, 28)}.{random.randint(1, 12)}.201{random.randint(5, 9)}\n"
+            f"🔄 Статус: {random.choice(activity_statuses)}\n"
+            f"⏰ Активность: {'Высокая (ежедневно)' if random.random() > 0.3 else 'Средняя (несколько раз в неделю)'}\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"🛡️ ПРОВЕРКА БЕЗОПАСНОСТИ\n"
             f"🔍 В базах спама: {'НЕТ' if random.random() > 0.2 else 'ДА'}\n"
             f"🔍 В черных списках: {'НЕТ' if random.random() > 0.15 else 'ДА'}\n"
-            f"🔒 Уровень доверия: {random.choice(trust_levels)}\n"
+            f"🔍 В базах мошенников: {'НЕТ' if random.random() > 0.1 else 'ДА'}\n"
             f"⭐ Рейтинг: {random.randint(40, 50)/10:.1f}/5.0\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"📌 ИНФОРМАЦИЯ С СЕРВЕРА\n"
             f"🕐 Проверено: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\n"
-            f"📊 Источник: База оператора + OSINT\n"
+            f"📊 Источник: База сервера\n"
             f"🎯 Точность: {random.randint(95, 99)}.{random.randint(0, 9)}%\n"
             f"🖥️ Сервер: SRV-PROBE-02\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -367,7 +362,7 @@ async def handle_action(callback: CallbackQuery, state: FSMContext):
         )
         user_data[user_id]["input_msg_id"] = sent.message_id
         
-        await state.set_state(AttackStates.waiting_for_ip)
+        await state.set_state(AttackStates.waiting_for_input)
         
         try:
             await callback.answer()
@@ -379,7 +374,7 @@ async def handle_action(callback: CallbackQuery, state: FSMContext):
         logger.error(traceback.format_exc())
 
 # ========== ВВОД IP/НОМЕРА ==========
-@dp.message(AttackStates.waiting_for_ip)
+@dp.message(AttackStates.waiting_for_input)
 async def process_input(message: types.Message, state: FSMContext):
     try:
         user_id = message.from_user.id
@@ -443,9 +438,6 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
         
         logger.info(f"💀 ЗАПУСК: {action} на цель: {target} от пользователя {user_id}")
         
-        # ================================================================
-        # ВЫБОР СЦЕНАРИЯ
-        # ================================================================
         if "DDOS" in action:
             await run_ddos_animation(callback, user_id, target)
         elif "DOKS" in action:
@@ -457,11 +449,7 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
         else:
             await run_ddos_animation(callback, user_id, target)
         
-        # ================================================================
-        # ОТПРАВКА ОТЧЕТА АДМИНУ
-        # ================================================================
         await send_admin_report(user_id, target, action)
-        
         await state.clear()
         
     except Exception as e:
@@ -473,7 +461,7 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
             pass
 
 # ================================================================
-# 🚀 DDOS АТАКА (НОВЫЙ СТИЛЬ)
+# 🚀 DDOS АТАКА
 # ================================================================
 async def run_ddos_animation(callback, user_id, ip):
     try:
@@ -511,7 +499,6 @@ async def run_ddos_animation(callback, user_id, ip):
         
         await asyncio.sleep(0.5)
         
-        # ----- СООБЩЕНИЕ 2: ДАННЫЕ О СИСТЕМЕ -----
         await msg.edit_text(
             f"📊 ДАННЫЕ О СИСТЕМЕ\n\n"
             f"🌐 IP: {ip}\n"
@@ -525,7 +512,6 @@ async def run_ddos_animation(callback, user_id, ip):
         )
         await asyncio.sleep(3)
         
-        # ----- СООБЩЕНИЕ 3: ПОДГОТОВКА -----
         load_steps = [
             (0, "ОЖИДАНИЕ..."),
             (25, "ЗАГРУЗКА МОДУЛЕЙ..."),
@@ -553,7 +539,6 @@ async def run_ddos_animation(callback, user_id, ip):
         
         await asyncio.sleep(0.5)
         
-        # ----- СООБЩЕНИЕ 4: ЗАПУСК АТАКИ -----
         await msg.edit_text(
             f"🚀 ЗАПУСК АТАКИ\n\n"
             f"🎯 Цель: {ip}\n"
@@ -565,7 +550,6 @@ async def run_ddos_animation(callback, user_id, ip):
         )
         await asyncio.sleep(2)
         
-        # ----- СООБЩЕНИЕ 5-7: ВОЛНЫ -----
         waves = [
             (1, [
                 (15, "143,829", "НИЗКАЯ", 1847, 0.8),
@@ -596,7 +580,6 @@ async def run_ddos_animation(callback, user_id, ip):
                 bars = "█" * (percent//10) + "░" * (10 - percent//10)
                 try:
                     if percent == 100:
-                        status_text = "ЗАВЕРШЕНА" if wave_num < 3 else "✅ ФИНАЛЬНАЯ ЗАВЕРШЕНА"
                         await msg.edit_text(
                             f"🌊 ВОЛНА #{wave_num}\n\n"
                             f"📊 Статистика\n"
@@ -625,7 +608,6 @@ async def run_ddos_animation(callback, user_id, ip):
         
         await asyncio.sleep(0.5)
         
-        # ----- СООБЩЕНИЕ 8: ИТОГИ -----
         total_packets = 847231 + 1694462 + 2847331
         avg_speed = (2.4 + 3.8 + 4.8) / 3
         
@@ -642,7 +624,6 @@ async def run_ddos_animation(callback, user_id, ip):
         )
         await asyncio.sleep(3)
         
-        # ----- СООБЩЕНИЕ 9: ФИНАЛ -----
         await msg.edit_text(
             f"✅ DDOS АТАКА ЗАВЕРШЕНА\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -665,7 +646,7 @@ async def run_ddos_animation(callback, user_id, ip):
         logger.error(traceback.format_exc())
 
 # ================================================================
-# 💉 DOKS АТАКА (НОВЫЙ СТИЛЬ)
+# 💉 DOKS АТАКА
 # ================================================================
 async def run_doks_animation(callback, user_id, ip):
     try:
@@ -843,7 +824,7 @@ async def run_doks_animation(callback, user_id, ip):
         logger.error(traceback.format_exc())
 
 # ================================================================
-# 🔍 ПРОБИВ IP (РЕАЛЬНЫЙ)
+# 🔍 ПРОБИВ IP
 # ================================================================
 async def run_probe_ip_animation(callback, user_id, ip):
     try:
@@ -890,7 +871,7 @@ async def run_probe_ip_animation(callback, user_id, ip):
         logger.error(traceback.format_exc())
 
 # ================================================================
-# 📱 ПРОБИВ НОМЕРА (РЕАЛЬНЫЙ)
+# 📱 ПРОБИВ НОМЕРА
 # ================================================================
 async def run_probe_phone_animation(callback, user_id, phone):
     try:
@@ -899,17 +880,16 @@ async def run_probe_phone_animation(callback, user_id, phone):
             f"🎯 Номер: {phone}\n\n"
             f"⚡ Поиск в базах операторов...\n"
             f"⏳ Определение региона...\n"
-            f"⏳ Проверка в открытых источниках...\n"
-            f"⏳ Анализ активности...\n\n"
+            f"⏳ Проверка в открытых источниках...\n\n"
             f"Прогресс: ░░░░░░░░░░░░░░░░ 0%\n\n"
             f"Статус: ИНИЦИАЛИЗАЦИЯ..."
         )
         await asyncio.sleep(0.5)
         
         phone_steps = [
-            (33, "⚡ Поиск в базах операторов... ✅\n⏳ Определение региона...\n⏳ Проверка в открытых источниках...\n⏳ Анализ активности...", "ПОИСК ДАННЫХ..."),
-            (66, "⚡ Поиск в базах операторов... ✅\n⏳ Определение региона... ✅\n⏳ Проверка в открытых источниках...\n⏳ Анализ активности...", "АНАЛИЗ ДАННЫХ..."),
-            (100, "⚡ Поиск в базах операторов... ✅\n⏳ Определение региона... ✅\n⏳ Проверка в открытых источниках... ✅\n⏳ Анализ активности... ✅", "✅ ДАННЫЕ ПОЛУЧЕНЫ")
+            (33, "⚡ Поиск в базах операторов... ✅\n⏳ Определение региона...\n⏳ Проверка в открытых источниках...", "ПОИСК ДАННЫХ..."),
+            (66, "⚡ Поиск в базах операторов... ✅\n⏳ Определение региона... ✅\n⏳ Проверка в открытых источниках...", "АНАЛИЗ ДАННЫХ..."),
+            (100, "⚡ Поиск в базах операторов... ✅\n⏳ Определение региона... ✅\n⏳ Проверка в открытых источниках... ✅", "✅ ДАННЫЕ ПОЛУЧЕНЫ")
         ]
         
         for percent, lines, status in phone_steps:
