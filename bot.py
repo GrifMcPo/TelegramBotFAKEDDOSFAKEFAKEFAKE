@@ -63,33 +63,21 @@ async def get_ip_info(ip: str):
     except Exception as e:
         return {'success': False, 'text': f"❌ Ошибка: {str(e)}"}
 
-# ========== БЕЗОПАСНОЕ УДАЛЕНИЕ СООБЩЕНИЯ ==========
-async def safe_delete(chat_id: int, message_id: int):
-    try:
-        await bot.delete_message(chat_id=chat_id, message_id=message_id)
-        logger.info(f"🗑️ Сообщение {message_id} удалено")
-        return True
-    except Exception as e:
-        logger.warning(f"⚠️ Не удалось удалить: {e}")
-        return False
-
-# ========== ОБРАБОТЧИК ПОДКЛЮЧЕНИЯ К БИЗНЕС-АККАУНТУ ==========
+# ========== ОБРАБОТЧИК ПОДКЛЮЧЕНИЯ ==========
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
     logger.info("=" * 60)
     logger.info("🔗 ПОДКЛЮЧЕНИЕ К БИЗНЕС-АККАУНТУ!")
     logger.info(f"📌 ID подключения: {connection.id}")
     logger.info(f"📌 Пользователь: @{connection.user.username if connection.user else 'Нет'}")
-    logger.info(f"📌 Может отвечать: {connection.can_reply}")
     logger.info("=" * 60)
 
-# ========== ОБРАБОТЧИК СООБЩЕНИЙ ИЗ ЛИЧНЫХ ЧАТОВ ==========
+# ========== ОСНОВНОЙ ОБРАБОТЧИК (РЕДАКТИРУЕТ ТВОИ СООБЩЕНИЯ) ==========
 @dp.business_message()
 async def handle_business_message(message: types.Message):
     try:
         logger.info("=" * 60)
-        logger.info("📩 НОВОЕ СООБЩЕНИЕ ИЗ ЛИЧНОГО ЧАТА (BUSINESS API)")
-        logger.info(f"📌 ID ПОДКЛЮЧЕНИЯ: {message.business_connection_id}")
+        logger.info("📩 НОВОЕ СООБЩЕНИЕ ИЗ ЛИЧНОГО ЧАТА")
         logger.info(f"📌 ОТ: @{message.from_user.username or 'Нет'}")
         logger.info(f"📌 ТЕКСТ: {message.text}")
         logger.info("=" * 60)
@@ -102,69 +90,110 @@ async def handle_business_message(message: types.Message):
         message_id = message.message_id
 
         # ============================================================
-        # КОМАНДА .whois
+        # КОМАНДА .ping - РЕДАКТИРУЕТ ТВОЕ СООБЩЕНИЕ
+        # ============================================================
+        if text.lower() == '.ping':
+            logger.info("🎯 .ping - РЕДАКТИРУЮ СООБЩЕНИЕ")
+            
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}"
+            )
+            
+            logger.info("✅ Сообщение отредактировано на Pong")
+            return
+
+        # ============================================================
+        # КОМАНДА .whois - РЕДАКТИРУЕТ ТВОЕ СООБЩЕНИЕ
         # ============================================================
         if text.lower().startswith('.whois'):
-            logger.info("🎯 .whois")
+            logger.info("🎯 .whois - РЕДАКТИРУЮ СООБЩЕНИЕ")
+            
             ip = text.replace('.whois', '').strip()
             
             if not ip:
-                await safe_delete(chat_id, message_id)
-                await message.answer("❌ Введите IP\nПример: .whois 8.8.8.8")
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text="❌ ОШИБКА\n\nВведите IP-адрес\n📌 Пример: .whois 8.8.8.8"
+                )
                 return
             
             ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
             if not re.match(ip_pattern, ip):
-                await safe_delete(chat_id, message_id)
-                await message.answer(f"❌ Некорректный IP: {ip}")
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=f"❌ НЕКОРРЕКТНЫЙ IP\n\nВведено: {ip}\n📌 Пример: 8.8.8.8"
+                )
                 return
             
-            # Удаляем команду
-            await safe_delete(chat_id, message_id)
+            # Сначала меняем на "загрузка"
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=f"🔍 ПОИСК ИНФОРМАЦИИ ОБ IP {ip}..."
+            )
             
-            # Отправляем загрузку
-            loading = await message.answer(f"🔍 Поиск информации об IP {ip}...")
+            # Получаем данные
             result = await get_ip_info(ip)
-            await loading.edit_text(result['text'])
+            
+            # Редактируем финальным результатом
+            if result['success']:
+                final_text = result['text']
+            else:
+                final_text = f"❌ ОШИБКА\n\n{result['text']}"
+            
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=final_text
+            )
+            
+            logger.info(f"✅ Сообщение отредактировано на информацию об IP {ip}")
             return
 
         # ============================================================
-        # КОМАНДА .help
+        # КОМАНДА .help - РЕДАКТИРУЕТ ТВОЕ СООБЩЕНИЕ
         # ============================================================
         if text.lower() == '.help':
-            logger.info("🎯 .help")
-            await safe_delete(chat_id, message_id)
-            await message.answer(
-                "🤖 КОМАНДЫ\n\n"
-                ".whois IP - информация об IP\n"
-                ".help - помощь\n"
-                ".ping - проверка\n"
-                "/chatid - ID чата"
+            logger.info("🎯 .help - РЕДАКТИРУЮ СООБЩЕНИЕ")
+            
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=(
+                    "🤖 ДОСТУПНЫЕ КОМАНДЫ\n\n"
+                    ".whois IP - информация об IP\n"
+                    ".help - помощь\n"
+                    ".ping - проверка\n\n"
+                    "🔥 Бот РЕДАКТИРУЕТ твои сообщения!"
+                )
             )
+            
+            logger.info("✅ Сообщение отредактировано на Help")
             return
 
         # ============================================================
-        # КОМАНДА .ping
-        # ============================================================
-        if text.lower() == '.ping':
-            logger.info("🎯 .ping")
-            await safe_delete(chat_id, message_id)
-            await message.answer(f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}")
-            return
-
-        # ============================================================
-        # КОМАНДА /chatid
+        # КОМАНДА /chatid - РЕДАКТИРУЕТ ТВОЕ СООБЩЕНИЕ
         # ============================================================
         if text.lower() == '/chatid':
-            logger.info("🎯 /chatid")
-            await safe_delete(chat_id, message_id)
-            await message.answer(
-                f"📊 ИНФОРМАЦИЯ О ЧАТЕ\n\n"
-                f"🆔 ID ЧАТА: {chat_id}\n"
-                f"📌 ТИП: {message.chat.type}\n"
-                f"👤 ТВОЙ ID: {message.from_user.id}\n"
-                f"👤 ЮЗЕР: @{message.from_user.username or 'Нет'}"
+            logger.info("🎯 /chatid - РЕДАКТИРУЮ СООБЩЕНИЕ")
+            
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=(
+                    f"📊 ИНФОРМАЦИЯ О ЧАТЕ\n\n"
+                    f"🆔 ID ЧАТА: {chat_id}\n"
+                    f"📌 ТИП: {message.chat.type}\n"
+                    f"👤 ТВОЙ ID: {message.from_user.id}\n"
+                    f"👤 ЮЗЕР: @{message.from_user.username or 'Нет'}"
+                )
             )
+            
+            logger.info("✅ Сообщение отредактировано на ChatID")
             return
 
         # ============================================================
@@ -181,22 +210,22 @@ async def handle_business_message(message: types.Message):
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
     await message.answer(
-        "🤖 БОТ ДЛЯ ЛИЧНЫХ ЧАТОВ (BUSINESS API)\n\n"
-        "📌 КОМАНДЫ:\n"
+        "🤖 БОТ ДЛЯ ЛИЧНЫХ ЧАТОВ\n\n"
+        "📌 КОМАНДЫ РЕДАКТИРУЮТ ТВОИ СООБЩЕНИЯ:\n\n"
         ".whois IP - информация об IP\n"
         ".help - помощь\n"
         ".ping - проверка\n"
         "/chatid - ID чата\n\n"
-        "🔥 Бот удаляет твои команды и отвечает чисто!\n"
-        "📌 Пример: .whois 8.8.8.8"
+        "🔥 Пример: .whois 8.8.8.8\n"
+        "Твоё сообщение ЗАМЕНИТСЯ на информацию об IP!"
     )
 
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
-    logger.info("🔥 БОТ ДЛЯ ЛИЧНЫХ ЧАТОВ (BUSINESS API)")
-    logger.info("📌 Бот УДАЛЯЕТ команды и ОТВЕЧАЕТ")
-    logger.info("📌 Работает в ЛЮБЫХ личных чатах")
+    logger.info("🔥 БОТ РЕДАКТИРУЕТ ТВОИ СООБЩЕНИЯ!")
+    logger.info("📌 Ты пишешь .ping → сообщение становится Pong!")
+    logger.info("📌 Ты пишешь .whois IP → сообщение становится инфой об IP!")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
