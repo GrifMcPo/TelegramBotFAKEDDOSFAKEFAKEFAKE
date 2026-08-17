@@ -4,6 +4,7 @@ import sys
 import logging
 import re
 import requests
+import random
 import phonenumbers
 from phonenumbers import carrier, geocoder, timezone
 from datetime import datetime
@@ -11,6 +12,7 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types.business_connection import BusinessConnection
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,6 +34,32 @@ if not BOT_TOKEN:
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+
+# ========== ХРАНИЛИЩЕ ==========
+spam_active = {}
+
+# ========== ТВОИ ОСКОРБЛЕНИЯ ==========
+INSULTS = [
+    "хахах что ты пидорасина в себя поверил?",
+    "Сколько твоя мамка в час берет? или бесплатно ха-ха",
+    "Что ты плакать мамульке побежишь?",
+    "Ты же как ныть нихуя не умеешь пидорас толстый",
+    "ной ной своей мамке ты просто не знаешь что я ее ебал",
+    "Ты такой жалкий, что даже бомжи тебя жалеют!",
+    "Твоя мамаша настолько толстая, что у нее свой гравитационный пояс!",
+    "Ты настолько тупой, что даже 2+2 не можешь посчитать!",
+    "Твой папаша настолько ленивый, что даже дышит через раз!",
+    "Ты такой никчемный, что даже интернет тебя не хочет!"
+]
+
+# ========== КЛАВИАТУРА ДЛЯ СПАМ-МЕНЮ ==========
+def get_spam_keyboard():
+    buttons = [
+        [InlineKeyboardButton(text="🔥 Троллинг спам", callback_data="spam_troll")],
+        [InlineKeyboardButton(text="⏳ В разработке", callback_data="spam_dev")],
+        [InlineKeyboardButton(text="⏳ В разработке", callback_data="spam_dev2")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 # ========== ФУНКЦИЯ ДЛЯ ПРОБИВА IP ==========
 async def get_ip_info(ip: str):
@@ -102,19 +130,34 @@ async def get_phone_info(phone: str):
         return {'success': False, 'text': f"❌ Ошибка: {str(e)}"}
 
 # ========== ОТПРАВКА В БИЗНЕС-ЧАТ ==========
-async def send_business_message(chat_id: int, text: str, connection_id: str = None):
+async def send_business_message(chat_id: int, text: str, connection_id: str = None, reply_markup=None):
     try:
         if connection_id:
             return await bot.send_message(
                 chat_id=chat_id,
                 text=text,
-                business_connection_id=connection_id
+                business_connection_id=connection_id,
+                reply_markup=reply_markup
             )
         else:
-            return await bot.send_message(chat_id=chat_id, text=text)
+            return await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=reply_markup
+            )
     except Exception as e:
         logger.error(f"❌ Ошибка отправки: {e}")
         return None
+
+# ========== БЕЗОПАСНОЕ УДАЛЕНИЕ ==========
+async def safe_delete(chat_id: int, message_id: int):
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        logger.info(f"🗑️ Сообщение удалено")
+        return True
+    except Exception as e:
+        logger.debug(f"⚠️ Не удалось удалить: {e}")
+        return False
 
 # ========== ОБРАБОТЧИК ПОДКЛЮЧЕНИЯ ==========
 @dp.business_connection()
@@ -124,6 +167,55 @@ async def handle_business_connection(connection: BusinessConnection):
     logger.info(f"📌 ID подключения: {connection.id}")
     logger.info(f"📌 Пользователь: @{connection.user.username if connection.user else 'Нет'}")
     logger.info("=" * 60)
+
+# ========== ОБРАБОТЧИК НАЖАТИЯ КНОПОК ==========
+@dp.callback_query()
+async def handle_callback(callback: types.CallbackQuery):
+    try:
+        data = callback.data
+        chat_id = callback.message.chat.id
+        message_id = callback.message.message_id
+        user_id = callback.from_user.id
+        
+        logger.info(f"🎯 Нажата кнопка: {data} от @{callback.from_user.username}")
+        
+        # ============================================================
+        # КНОПКА: ТРОЛЛИНГ СПАМ
+        # ============================================================
+        if data == "spam_troll":
+            await safe_delete(chat_id, message_id)
+            
+            await bot.send_message(
+                chat_id=chat_id,
+                text="🔥 Начинаю троллинг спам...\n\n💬 Отправляю 10 оскорблений!"
+            )
+            
+            for i, insult in enumerate(INSULTS, 1):
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=f"{i}. {insult}"
+                )
+                await asyncio.sleep(0.5)
+            
+            await bot.send_message(
+                chat_id=chat_id,
+                text="✅ Спам завершен! Все 10 оскорблений отправлены."
+            )
+            
+            await callback.answer()
+            return
+        
+        # ============================================================
+        # КНОПКИ: В РАЗРАБОТКЕ
+        # ============================================================
+        if data in ["spam_dev", "spam_dev2"]:
+            await callback.answer("⏳ Функция в разработке!", show_alert=True)
+            return
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка в callback: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
 
 # ========== ОСНОВНОЙ ОБРАБОТЧИК ==========
 @dp.business_message()
@@ -143,7 +235,7 @@ async def handle_business_message(message: types.Message):
         connection_id = message.business_connection_id
 
         # ============================================================
-        # КОМАНДА .inf - СПРАВКА С ЦИТАТОЙ
+        # КОМАНДА .inf - СПРАВКА
         # ============================================================
         if text.lower() == '.inf':
             logger.info("🎯 .inf")
@@ -156,7 +248,12 @@ async def handle_business_message(message: types.Message):
                     "📌 Формат команд: .команда - описание\n\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     "🐢 ПРОБИВ\n\n"
-                    "> .whois [ip/number] - Пробив по IP или номеру телефона.\n\n"
+                    "> .whois ip [IP] - Пробив по IP-адресу\n"
+                    "> .whois number [НОМЕР] - Пробив по номеру телефона\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "🔥 СПАМ\n\n"
+                    "> .spam [Кол-во] [Текст] - Спам вашим сообщением\n"
+                    "> .spams - Открыть спам-меню\n\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     "⚡ ДРУГОЕ\n\n"
                     "> .ping - Проверка работы бота\n"
@@ -167,12 +264,92 @@ async def handle_business_message(message: types.Message):
             return
 
         # ============================================================
+        # КОМАНДА .spam [КОЛ-ВО] [ТЕКСТ]
+        # ============================================================
+        if text.lower().startswith('.spam') and not text.lower().startswith('.spams'):
+            logger.info("🎯 .spam")
+            
+            # Разбираем команду: .spam 5 Привет
+            parts = text.split(maxsplit=2)
+            
+            if len(parts) < 3:
+                await send_business_message(
+                    chat_id,
+                    "❌ Неправильный формат\n\n"
+                    "📌 .spam [Кол-во] [Текст]\n\n"
+                    "Пример: .spam 5 Привет всем!",
+                    connection_id
+                )
+                return
+            
+            try:
+                count = int(parts[1])
+                spam_text = parts[2]
+            except ValueError:
+                await send_business_message(
+                    chat_id,
+                    "❌ Количество должно быть числом!\n\n"
+                    "Пример: .spam 5 Привет всем!",
+                    connection_id
+                )
+                return
+            
+            if count < 1:
+                await send_business_message(chat_id, "❌ Количество должно быть больше 0!", connection_id)
+                return
+            
+            if count > 100:
+                await send_business_message(chat_id, "❌ Максимум 100 сообщений за раз!", connection_id)
+                return
+            
+            # Отправляем сообщение о начале спама
+            await send_business_message(
+                chat_id=chat_id,
+                text=f"🔥 Начинаю спам!\n📊 {count} сообщений\n📝 Текст: {spam_text}",
+                connection_id=connection_id
+            )
+            
+            # Отправляем спам
+            for i in range(1, count + 1):
+                await send_business_message(
+                    chat_id=chat_id,
+                    text=f"{i}. {spam_text}",
+                    connection_id=connection_id
+                )
+                await asyncio.sleep(0.3)  # Задержка между сообщениями
+            
+            await send_business_message(
+                chat_id=chat_id,
+                text=f"✅ Спам завершен! Отправлено {count} сообщений.",
+                connection_id=connection_id
+            )
+            
+            logger.info(f"✅ Спам {count} раз отправлен")
+            return
+
+        # ============================================================
+        # КОМАНДА .spams - СПАМ-МЕНЮ
+        # ============================================================
+        if text.lower() == '.spams':
+            logger.info("🎯 .spams")
+            
+            await send_business_message(
+                chat_id=chat_id,
+                text=(
+                    "🔥 Спам-меню открыто!\n\n"
+                    "Выберите какой спам вам нужен:"
+                ),
+                connection_id=connection_id,
+                reply_markup=get_spam_keyboard()
+            )
+            return
+
+        # ============================================================
         # КОМАНДА .whois
         # ============================================================
         if text.lower().startswith('.whois'):
             logger.info("🎯 .whois")
             
-            # Разбираем аргументы
             parts = text.split()
             if len(parts) < 3:
                 await send_business_message(
@@ -267,6 +444,8 @@ async def start_command(message: types.Message):
         "📌 КОМАНДЫ:\n"
         ".whois ip [IP] - пробив по IP\n"
         ".whois number [НОМЕР] - пробив по номеру\n"
+        ".spam [Кол-во] [Текст] - спам вашим текстом\n"
+        ".spams - спам-меню\n"
         ".ping - проверка\n"
         ".inf - справка"
     )
@@ -275,7 +454,7 @@ async def start_command(message: types.Message):
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info("📌 Команды: .inf, .whois ip, .whois number, .ping")
+    logger.info("📌 Команды: .inf, .whois, .spam, .spams, .ping")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
