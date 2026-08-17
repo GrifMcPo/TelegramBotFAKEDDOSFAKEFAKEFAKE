@@ -9,11 +9,11 @@ from datetime import datetime
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import ChatType
+from aiogram.enums import ChatType  # <--- ПРАВИЛЬНЫЙ ИМПОРТ
 
 # ========== НАСТРОЙКА МОЩНОГО ЛОГИРОВАНИЯ ==========
 logging.basicConfig(
-    level=logging.DEBUG,  # Меняем на DEBUG для максимальной детализации
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('bot.log'),
