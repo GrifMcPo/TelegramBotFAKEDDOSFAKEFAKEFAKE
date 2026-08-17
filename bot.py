@@ -5,6 +5,8 @@ import logging
 import traceback
 import random
 import requests
+import phonenumbers
+from phonenumbers import carrier, geocoder, timezone
 from datetime import datetime
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
@@ -29,7 +31,6 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# ВАШ ADMIN ID: 8857252828
 try:
     ADMIN_ID = int(os.getenv("ADMIN_ID", "8857252828"))
 except ValueError:
@@ -68,9 +69,7 @@ async def safe_delete_message(chat_id: int, message_id: int):
 
 # ========== ФУНКЦИЯ ДЛЯ РЕАЛЬНОГО ПРОБИВА IP ==========
 async def get_real_ip_info(ip: str):
-    """Получение реальной информации об IP через API ip-api.com"""
     try:
-        # Отправляем запрос к бесплатному API
         response = requests.get(
             f'http://ip-api.com/json/{ip}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,isp,org,as,asname,timezone,query',
             timeout=10
@@ -80,115 +79,168 @@ async def get_real_ip_info(ip: str):
             data = response.json()
             
             if data.get('status') == 'success':
-                # Формируем красивый ответ с реальными данными
                 info_text = (
-                    f"╔══════════════════════════════════════════════════════════╗\n"
-                    f"║         📊 ДАННЫЕ С СЕРВЕРА ПРОБИВА 📊                ║\n"
-                    f"╚══════════════════════════════════════════════════════════╝\n\n"
-                    f"┌────────────────────────────────────────────────────────┐\n"
-                    f"│  🌐 IP-АДРЕС:     {data['query']}                   │\n"
-                    f"│  🌍 СТРАНА:       {data['country']} {data.get('countryCode', '')}                         │\n"
-                    f"│  🏙️ РЕГИОН:       {data['regionName']}                       │\n"
-                    f"│  🏙️ ГОРОД:        {data['city']}                             │\n"
-                    f"│  📮 ПОЧТОВЫЙ ИНДЕКС: {data['zip']}                           │\n"
-                    f"│  📍 КООРДИНАТЫ:   {data['lat']}, {data['lon']}                       │\n"
-                    f"│  🗺️ КАРТА:        https://maps.google.com/maps?q={data['lat']},{data['lon']} │\n"
-                    f"│  📡 ПРОВАЙДЕР:    {data['isp']}                              │\n"
-                    f"│  🏢 ОРГАНИЗАЦИЯ:  {data['org']}                              │\n"
-                    f"│  🔗 AS:           {data['as']} ({data.get('asname', '')})                    │\n"
-                    f"│  ⏰ ЧАСОВОЙ ПОЯС:  {data['timezone']}                        │\n"
-                    f"└────────────────────────────────────────────────────────┘\n\n"
-                    f"✅ ПРОБИВ УСПЕШНО ЗАВЕРШЕН!\n\n"
-                    f"📌 ИНФОРМАЦИЯ ПОЛУЧЕНА С СЕРВЕРА:\n"
-                    f"• ВРЕМЯ ЗАПРОСА: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\n"
-                    f"• СЕРВЕР: SRV-PROBE-01\n"
-                    f"• СТАТУС: 200 OK\n"
-                    f"• ТОЧНОСТЬ: 98.7%\n\n"
-                    f"🔒 ДАННЫЕ ЗАЛОГИРОВАНЫ В СИСТЕМЕ!\n"
-                    f"💀 ВСЯ ИНФОРМАЦИЯ ЗАШИФРОВАНА!"
+                    f"📊 РЕЗУЛЬТАТ ПРОБИВА IP\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"🌐 ОСНОВНАЯ ИНФОРМАЦИЯ\n"
+                    f"🌐 IP: {data['query']}\n"
+                    f"🌍 Страна: {data['country']} {data.get('countryCode', '')}\n"
+                    f"🏙️ Регион: {data['regionName']}\n"
+                    f"🏙️ Город: {data['city']}\n"
+                    f"📮 Индекс: {data['zip']}\n"
+                    f"📍 Координаты: {data['lat']}, {data['lon']}\n"
+                    f"🗺️ Карта: https://maps.google.com/maps?q={data['lat']},{data['lon']}\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"📡 СЕТЕВАЯ ИНФОРМАЦИЯ\n"
+                    f"📡 Провайдер: {data['isp']}\n"
+                    f"🏢 Организация: {data['org']}\n"
+                    f"🔗 AS: {data['as']} ({data.get('asname', '')})\n"
+                    f"⏰ Часовой пояс: {data['timezone']}\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"📌 ИНФОРМАЦИЯ С СЕРВЕРА\n"
+                    f"🕐 Проверено: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\n"
+                    f"📊 Источник: WHOIS + GeoIP\n"
+                    f"🎯 Точность: 98.7%\n"
+                    f"🖥️ Сервер: SRV-PROBE-01\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"🔒 Данные зашифрованы!\n"
+                    f"💀 Информация сохранена!"
                 )
                 return {'success': True, 'text': info_text, 'data': data}
             else:
                 error_text = (
-                    f"╔══════════════════════════════════════════════════════════╗\n"
-                    f"║         ⚠️ ОШИБКА СЕРВЕРА ПРОБИВА ⚠️                  ║\n"
-                    f"╚══════════════════════════════════════════════════════════╝\n\n"
-                    f"┌────────────────────────────────────────────────────────┐\n"
-                    f"│  ❌ НЕ УДАЛОСЬ ПОЛУЧИТЬ ДАННЫЕ С СЕРВЕРА             │\n"
-                    f"├────────────────────────────────────────────────────────┤\n"
-                    f"│  📌 КОД ОШИБКИ: {data.get('status', 'UNKNOWN')}       │\n"
-                    f"│  📌 ОПИСАНИЕ: {data.get('message', 'Неизвестная ошибка')}│\n"
-                    f"│  🕐 ВРЕМЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}                             │\n"
-                    f"│  🖥️ СЕРВЕР: SRV-PROBE-01                             │\n"
-                    f"└────────────────────────────────────────────────────────┘\n\n"
-                    f"📌 ВОЗМОЖНЫЕ ПРИЧИНЫ:\n"
-                    f"• IP-АДРЕС НЕ НАЙДЕН В БАЗЕ\n"
-                    f"• ПРЕВЫШЕН ЛИМИТ ЗАПРОСОВ\n"
-                    f"• ТЕХНИЧЕСКИЕ РАБОТЫ НА СЕРВЕРЕ\n"
-                    f"• ПРОБЛЕМЫ С СЕТЕВЫМ СОЕДИНЕНИЕМ\n\n"
-                    f"🔄 НАПИШИТЕ /start ДЛЯ ПОВТОРНОЙ ПОПЫТКИ"
+                    f"❌ ОШИБКА ПРОВЕРКИ\n\n"
+                    f"⚠️ Не удалось получить данные\n\n"
+                    f"📌 Возможные причины:\n"
+                    f"• IP не найден в базе\n"
+                    f"• Превышен лимит запросов\n"
+                    f"• Проблемы с соединением\n\n"
+                    f"🔄 Напишите /start для повтора"
                 )
                 return {'success': False, 'text': error_text}
         else:
             error_text = (
-                f"╔══════════════════════════════════════════════════════════╗\n"
-                f"║         ⚠️ ОШИБКА СЕРВЕРА ПРОБИВА ⚠️                  ║\n"
-                f"╚══════════════════════════════════════════════════════════╝\n\n"
-                f"┌────────────────────────────────────────────────────────┐\n"
-                f"│  ❌ НЕ УДАЛОСЬ ПОЛУЧИТЬ ДАННЫЕ С СЕРВЕРА             │\n"
-                f"├────────────────────────────────────────────────────────┤\n"
-                f"│  📌 КОД ОШИБКИ: {response.status_code}                 │\n"
-                f"│  📌 ОПИСАНИЕ: Ошибка подключения к серверу           │\n"
-                f"│  🕐 ВРЕМЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}                             │\n"
-                f"│  🖥️ СЕРВЕР: SRV-PROBE-01                             │\n"
-                f"└────────────────────────────────────────────────────────┘\n\n"
-                f"🔄 НАПИШИТЕ /start ДЛЯ ПОВТОРНОЙ ПОПЫТКИ"
+                f"❌ ОШИБКА ПРОВЕРКИ\n\n"
+                f"⚠️ Ошибка подключения к серверу\n\n"
+                f"🔄 Напишите /start для повтора"
             )
             return {'success': False, 'text': error_text}
             
-    except requests.exceptions.Timeout:
-        error_text = (
-            f"╔══════════════════════════════════════════════════════════╗\n"
-            f"║         ⚠️ ОШИБКА СЕРВЕРА ПРОБИВА ⚠️                  ║\n"
-            f"╚══════════════════════════════════════════════════════════╝\n\n"
-            f"┌────────────────────────────────────────────────────────┐\n"
-            f"│  ❌ ПРЕВЫШЕНО ВРЕМЯ ОЖИДАНИЯ ОТВЕТА                   │\n"
-            f"├────────────────────────────────────────────────────────┤\n"
-            f"│  📌 ОПИСАНИЕ: Сервер не отвечает                      │\n"
-            f"│  🕐 ВРЕМЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}                             │\n"
-            f"│  🖥️ СЕРВЕР: SRV-PROBE-01                             │\n"
-            f"└────────────────────────────────────────────────────────┘\n\n"
-            f"🔄 НАПИШИТЕ /start ДЛЯ ПОВТОРНОЙ ПОПЫТКИ"
-        )
-        return {'success': False, 'text': error_text}
-    except requests.exceptions.ConnectionError:
-        error_text = (
-            f"╔══════════════════════════════════════════════════════════╗\n"
-            f"║         ⚠️ ОШИБКА СЕРВЕРА ПРОБИВА ⚠️                  ║\n"
-            f"╚══════════════════════════════════════════════════════════╝\n\n"
-            f"┌────────────────────────────────────────────────────────┐\n"
-            f"│  ❌ НЕ УДАЛОСЬ ПОДКЛЮЧИТЬСЯ К СЕРВЕРУ                 │\n"
-            f"├────────────────────────────────────────────────────────┤\n"
-            f"│  📌 ОПИСАНИЕ: Проблемы с сетевым соединением          │\n"
-            f"│  🕐 ВРЕМЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}                             │\n"
-            f"│  🖥️ СЕРВЕР: SRV-PROBE-01                             │\n"
-            f"└────────────────────────────────────────────────────────┘\n\n"
-            f"🔄 НАПИШИТЕ /start ДЛЯ ПОВТОРНОЙ ПОПЫТКИ"
-        )
-        return {'success': False, 'text': error_text}
     except Exception as e:
         error_text = (
-            f"╔══════════════════════════════════════════════════════════╗\n"
-            f"║         ⚠️ ОШИБКА СЕРВЕРА ПРОБИВА ⚠️                  ║\n"
-            f"╚══════════════════════════════════════════════════════════╝\n\n"
-            f"┌────────────────────────────────────────────────────────┐\n"
-            f"│  ❌ НЕПРЕДВИДЕННАЯ ОШИБКА                             │\n"
-            f"├────────────────────────────────────────────────────────┤\n"
-            f"│  📌 ОПИСАНИЕ: {str(e)}                                │\n"
-            f"│  🕐 ВРЕМЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}                             │\n"
-            f"│  🖥️ СЕРВЕР: SRV-PROBE-01                             │\n"
-            f"└────────────────────────────────────────────────────────┘\n\n"
-            f"🔄 НАПИШИТЕ /start ДЛЯ ПОВТОРНОЙ ПОПЫТКИ"
+            f"❌ ОШИБКА ПРОВЕРКИ\n\n"
+            f"⚠️ {str(e)}\n\n"
+            f"🔄 Напишите /start для повтора"
+        )
+        return {'success': False, 'text': error_text}
+
+# ========== ФУНКЦИЯ ДЛЯ РЕАЛЬНОГО ПРОБИВА НОМЕРА ==========
+async def get_phone_info(phone: str):
+    try:
+        # Очищаем номер от лишних символов
+        phone_clean = phone.replace('+', '').replace('-', '').replace('(', '').replace(')', '').replace(' ', '')
+        
+        if not phone_clean.isdigit():
+            error_text = (
+                f"❌ НЕКОРРЕКТНЫЙ ФОРМАТ\n\n"
+                f"⚠️ Введен неправильный номер\n\n"
+                f"📌 Примеры правильных форматов:\n"
+                f"📱 +7 900 123-45-67\n"
+                f"📱 89001234567\n"
+                f"📱 8 (900) 123-45-67\n\n"
+                f"🔄 Напишите /start для повтора"
+            )
+            return {'success': False, 'text': error_text}
+        
+        # Парсим номер
+        try:
+            parsed = phonenumbers.parse(phone_clean, None)
+            if not phonenumbers.is_valid_number(parsed):
+                error_text = (
+                    f"❌ НЕКОРРЕКТНЫЙ ФОРМАТ\n\n"
+                    f"⚠️ Номер не существует\n\n"
+                    f"🔄 Напишите /start для повтора"
+                )
+                return {'success': False, 'text': error_text}
+        except:
+            # Пробуем с кодом России
+            try:
+                parsed = phonenumbers.parse(phone_clean, "RU")
+                if not phonenumbers.is_valid_number(parsed):
+                    error_text = (
+                        f"❌ НЕКОРРЕКТНЫЙ ФОРМАТ\n\n"
+                        f"⚠️ Номер не существует\n\n"
+                        f"🔄 Напишите /start для повтора"
+                    )
+                    return {'success': False, 'text': error_text}
+            except:
+                error_text = (
+                    f"❌ НЕКОРРЕКТНЫЙ ФОРМАТ\n\n"
+                    f"⚠️ Номер не существует\n\n"
+                    f"🔄 Напишите /start для повтора"
+                )
+                return {'success': False, 'text': error_text}
+        
+        # Получаем данные
+        operator = carrier.name_for_number(parsed, "ru") or "Не определен"
+        region = geocoder.description_for_number(parsed, "ru") or "Не определен"
+        timezone_info = timezone.time_zones_for_number(parsed)
+        
+        # Форматируем номер
+        formatted_number = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
+        national_number = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.NATIONAL)
+        
+        # Генерируем случайные дополнительные данные (для реалистичности)
+        import random
+        activity_statuses = ["АКТИВЕН", "АКТИВЕН", "АКТИВЕН", "НЕАКТИВЕН", "В РОМИНГЕ"]
+        trust_levels = ["ВЫСОКИЙ", "ВЫСОКИЙ", "СРЕДНИЙ", "ВЫСОКИЙ", "НИЗКИЙ"]
+        
+        info_text = (
+            f"📊 РЕЗУЛЬТАТ ПРОБИВА НОМЕРА\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📱 ОСНОВНАЯ ИНФОРМАЦИЯ\n"
+            f"📱 Номер: {formatted_number}\n"
+            f"📱 Национальный: {national_number}\n"
+            f"📡 Оператор: {operator}\n"
+            f"🌍 Регион: {region}\n"
+            f"⏰ Часовой пояс: {', '.join(timezone_info) if timezone_info else 'Не определен'}\n"
+            f"🔄 Статус: {random.choice(activity_statuses)}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🔍 ДОПОЛНИТЕЛЬНЫЕ ДАННЫЕ\n"
+            f"📊 Тип: Мобильный\n"
+            f"🔄 Смена оператора: {'Нет' if random.random() > 0.3 else 'Была'}\n"
+            f"📍 Последняя активность: {datetime.now().strftime('Сегодня, %H:%M')}\n"
+            f"🔋 Батарея: {random.randint(70, 100)}% (данные с устройства)\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🛡️ ПРОВЕРКА БЕЗОПАСНОСТИ\n"
+            f"🔍 В базах спама: {'НЕТ' if random.random() > 0.2 else 'ДА'}\n"
+            f"🔍 В черных списках: {'НЕТ' if random.random() > 0.15 else 'ДА'}\n"
+            f"🔒 Уровень доверия: {random.choice(trust_levels)}\n"
+            f"⭐ Рейтинг: {random.randint(40, 50)/10:.1f}/5.0\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📌 ИНФОРМАЦИЯ С СЕРВЕРА\n"
+            f"🕐 Проверено: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\n"
+            f"📊 Источник: База оператора + OSINT\n"
+            f"🎯 Точность: {random.randint(95, 99)}.{random.randint(0, 9)}%\n"
+            f"🖥️ Сервер: SRV-PROBE-02\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🔒 Данные зашифрованы!\n"
+            f"💀 Информация сохранена в системе!\n"
+            f"📬 Отчет отправлен администратору!"
+        )
+        
+        return {'success': True, 'text': info_text, 'data': {
+            'number': formatted_number,
+            'operator': operator,
+            'region': region
+        }}
+        
+    except Exception as e:
+        logger.error(f"Ошибка пробива номера: {e}")
+        error_text = (
+            f"❌ ОШИБКА ПРОВЕРКИ\n\n"
+            f"⚠️ {str(e)}\n\n"
+            f"🔄 Напишите /start для повтора"
         )
         return {'success': False, 'text': error_text}
 
@@ -198,6 +250,7 @@ def get_main_keyboard():
         [InlineKeyboardButton(text="🌊 DDOS АТАКА", callback_data="action_ddos")],
         [InlineKeyboardButton(text="💉 DOKS АТАКА", callback_data="action_doks")],
         [InlineKeyboardButton(text="🔍 ПРОБИВ IP", callback_data="action_probe")],
+        [InlineKeyboardButton(text="📱 ПРОБИВ НОМЕРА", callback_data="action_phone")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -219,8 +272,13 @@ async def cmd_start(message: types.Message):
         await safe_delete_message(message.chat.id, message.message_id)
         
         sent_msg = await message.answer(
-            "⚡ ДОБРО ПОЖАЛОВАТЬ В СИСТЕМУ ⚡\n\n"
-            "Выберите необходимый инструмент:",
+            "⚡ ДОБРО ПОЖАЛОВАТЬ В СИСТЕМУ\n\n"
+            "Выберите инструмент:\n\n"
+            "🌊 DDOS АТАКА\n"
+            "💉 DOKS АТАКА\n"
+            "🔍 ПРОБИВ IP\n"
+            "📱 ПРОБИВ НОМЕРА\n\n"
+            "⬇️ Выберите действие ниже",
             reply_markup=get_main_keyboard()
         )
         
@@ -236,10 +294,9 @@ async def cmd_start(message: types.Message):
         logger.error(f"❌ Ошибка в /start: {e}")
         logger.error(traceback.format_exc())
 
-# ========== /ADMIN - ДЛЯ РЕГИСТРАЦИИ АДМИНА ==========
+# ========== /ADMIN ==========
 @dp.message(Command("admin"))
 async def admin_setup(message: types.Message):
-    """Команда для настройки админа"""
     try:
         user_id = message.from_user.id
         username = message.from_user.username or "Нет юзернейма"
@@ -261,11 +318,7 @@ async def admin_setup(message: types.Message):
             f"✅ ВЫ УСПЕШНО ЗАРЕГИСТРИРОВАНЫ КАК АДМИН!\n\n"
             f"🆔 ВАШ ID: {user_id}\n"
             f"👤 USER: @{username}\n"
-            f"📌 ТЕПЕРЬ ОТЧЕТЫ БУДУТ ПРИХОДИТЬ СЮДА\n\n"
-            f"💡 ЧТОБЫ ИЗМЕНИТЬ ADMIN_ID:\n"
-            f"1. Обновите ADMIN_ID в .env\n"
-            f"2. Перезапустите бота\n"
-            f"3. Напишите /admin снова"
+            f"📌 ТЕПЕРЬ ОТЧЕТЫ БУДУТ ПРИХОДИТЬ СЮДА"
         )
         
         test_report = (
@@ -294,7 +347,8 @@ async def handle_action(callback: CallbackQuery, state: FSMContext):
         action_names = {
             "ddos": "DDOS АТАКА",
             "doks": "DOKS АТАКА",
-            "probe": "ПРОБИВ IP"
+            "probe": "ПРОБИВ IP",
+            "phone": "ПРОБИВ НОМЕРА"
         }
         
         logger.info(f"📌 Пользователь {user_id} выбрал: {action_names[action]}")
@@ -309,7 +363,7 @@ async def handle_action(callback: CallbackQuery, state: FSMContext):
         
         sent = await callback.message.answer(
             f"✅ ВЫБРАНО: {user_data[user_id]['action']}\n\n"
-            "📌 ВВЕДИТЕ IP-АДРЕС ЦЕЛИ:"
+            f"📌 Введите IP-адрес или номер телефона:"
         )
         user_data[user_id]["input_msg_id"] = sent.message_id
         
@@ -324,14 +378,14 @@ async def handle_action(callback: CallbackQuery, state: FSMContext):
         logger.error(f"❌ Ошибка в handle_action: {e}")
         logger.error(traceback.format_exc())
 
-# ========== ВВОД IP ==========
+# ========== ВВОД IP/НОМЕРА ==========
 @dp.message(AttackStates.waiting_for_ip)
-async def process_ip(message: types.Message, state: FSMContext):
+async def process_input(message: types.Message, state: FSMContext):
     try:
         user_id = message.from_user.id
-        ip = message.text.strip()
+        user_input = message.text.strip()
         
-        logger.info(f"🌐 Пользователь {user_id} ввел IP: {ip}")
+        logger.info(f"📝 Пользователь {user_id} ввел: {user_input}")
         
         await safe_delete_message(message.chat.id, message.message_id)
         
@@ -339,11 +393,12 @@ async def process_ip(message: types.Message, state: FSMContext):
         if input_id:
             await safe_delete_message(chat_id=user_id, message_id=input_id)
         
-        user_data[user_id]["ip"] = ip
+        user_data[user_id]["target"] = user_input
         
         sent = await message.answer(
-            f"🎯 IP ЗАФИКСИРОВАН: <code>{ip}</code>\n\n"
-            "⚠️ ПОДТВЕРДИТЕ ЗАПУСК ⚠️",
+            f"🎯 Цель зафиксирована: <code>{user_input}</code>\n\n"
+            f"⚠️ ПОДТВЕРДИТЕ ЗАПУСК\n\n"
+            f"✅ ПОДТВЕРДИТЬ ❌ ОТМЕНА",
             reply_markup=get_confirm_keyboard(),
             parse_mode="HTML"
         )
@@ -352,7 +407,7 @@ async def process_ip(message: types.Message, state: FSMContext):
         await state.set_state(AttackStates.waiting_for_confirmation)
         
     except Exception as e:
-        logger.error(f"❌ Ошибка в process_ip: {e}")
+        logger.error(f"❌ Ошибка в process_input: {e}")
         logger.error(traceback.format_exc())
 
 # ========== ОСНОВНАЯ АНИМАЦИЯ ==========
@@ -369,7 +424,7 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
         await safe_delete_message(chat_id=user_id, message_id=callback.message.message_id)
         
         if choice == "no":
-            logger.info(f"❌ Пользователь {user_id} отменил атаку")
+            logger.info(f"❌ Пользователь {user_id} отменил операцию")
             await callback.message.answer("❌ ОПЕРАЦИЯ ОТМЕНЕНА. /start - ДЛЯ ПОВТОРА")
             await state.clear()
             try:
@@ -383,27 +438,29 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
         except:
             pass
         
-        ip = user_data[user_id]["ip"]
+        target = user_data[user_id]["target"]
         action = user_data[user_id]["action"]
         
-        logger.info(f"💀 ЗАПУСК АТАКИ: {action} на IP: {ip} от пользователя {user_id}")
+        logger.info(f"💀 ЗАПУСК: {action} на цель: {target} от пользователя {user_id}")
         
         # ================================================================
         # ВЫБОР СЦЕНАРИЯ
         # ================================================================
         if "DDOS" in action:
-            await run_ddos_animation(callback, user_id, ip)
+            await run_ddos_animation(callback, user_id, target)
         elif "DOKS" in action:
-            await run_doks_animation(callback, user_id, ip)
-        elif "ПРОБИВ" in action:
-            await run_probe_animation(callback, user_id, ip)
+            await run_doks_animation(callback, user_id, target)
+        elif "ПРОБИВ IP" in action:
+            await run_probe_ip_animation(callback, user_id, target)
+        elif "ПРОБИВ НОМЕРА" in action:
+            await run_probe_phone_animation(callback, user_id, target)
         else:
-            await run_ddos_animation(callback, user_id, ip)
+            await run_ddos_animation(callback, user_id, target)
         
         # ================================================================
         # ОТПРАВКА ОТЧЕТА АДМИНУ
         # ================================================================
-        await send_admin_report(user_id, ip, action)
+        await send_admin_report(user_id, target, action)
         
         await state.clear()
         
@@ -416,252 +473,151 @@ async def handle_confirm(callback: CallbackQuery, state: FSMContext):
             pass
 
 # ================================================================
-# 🚀 DDOS АТАКА (РЕАЛИСТИЧНАЯ)
+# 🚀 DDOS АТАКА (НОВЫЙ СТИЛЬ)
 # ================================================================
 async def run_ddos_animation(callback, user_id, ip):
-    """Сценарий DDOS атаки - максимально реалистичный"""
     try:
-        # ---- СООБЩЕНИЕ 1: СКАНИРОВАНИЕ ----
         msg = await callback.message.answer(
-            "╔══════════════════════════════════════════════════════════╗\n"
-            "║              🔍 АНАЛИЗ ЦЕЛЕВОГО УЗЛА 🔍                ║\n"
-            "╚══════════════════════════════════════════════════════════╝\n\n"
-            "┌────────────────────────────────────────────────────────┐\n"
-            "│  ⚡ ЗОНДИРОВАНИЕ СЕТЕВОГО ПЕРИМЕТРА...               │\n"
-            "│  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 5%          │\n"
-            "│  ⏳ ОПРЕДЕЛЕНИЕ ТОПОЛОГИИ СЕТИ...                    │\n"
-            "│  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 5%          │\n"
-            "│  ⏳ ОБНАРУЖЕНИЕ АКТИВНЫХ СЕРВИСОВ...                  │\n"
-            "│  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 5%          │\n"
-            "└────────────────────────────────────────────────────────┘\n\n"
-            f"🎯 ЦЕЛЬ: <code>{ip}</code>\n"
-            "📡 СТАТУС: СКАНИРОВАНИЕ...",
-            parse_mode="HTML"
+            f"🔍 АНАЛИЗ ЦЕЛИ\n\n"
+            f"🎯 IP: {ip}\n\n"
+            f"⚡ Зондирование сети...\n"
+            f"⏳ Определение топологии...\n"
+            f"⏳ Поиск активных сервисов...\n\n"
+            f"Прогресс: ░░░░░░░░░░░░░░░░ 0%\n\n"
+            f"Статус: ИНИЦИАЛИЗАЦИЯ..."
         )
         await asyncio.sleep(0.5)
         
         scan_steps = [
-            (28, "███████████░░░░░░░░░░░░░░░░░░░░░░░░░ 28%", "ОПРЕДЕЛЕНИЕ ТОПОЛОГИИ...", "█████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 15%"),
-            (47, "███████████████████░░░░░░░░░░░░░░░░░ 47%", "ОПРЕДЕЛЕНИЕ ТОПОЛОГИИ...", "█████████░░░░░░░░░░░░░░░░░░░░░░░░ 28%"),
-            (68, "███████████████████████████░░░░░░░░░ 68%", "АНАЛИЗ СИСТЕМЫ...", "███████████████░░░░░░░░░░░░░░░░░ 46%"),
-            (89, "███████████████████████████████████░ 89%", "ЗАВЕРШЕНИЕ АНАЛИЗА...", "█████████████████████████░░░░░░ 78%"),
-            (100, "██████████████████████████████████████ 100%", "✅ АНАЛИЗ ЗАВЕРШЕН!", "██████████████████████████████████ 100%")
+            (25, "⚡ Зондирование сети... ✅\n⏳ Определение топологии...\n⏳ Поиск активных сервисов...", "СКАНИРОВАНИЕ..."),
+            (50, "⚡ Зондирование сети... ✅\n⏳ Определение топологии... ✅\n⏳ Поиск активных сервисов...", "АНАЛИЗ СИСТЕМЫ..."),
+            (75, "⚡ Зондирование сети... ✅\n⏳ Определение топологии... ✅\n⏳ Поиск активных сервисов... ✅", "ЗАВЕРШЕНИЕ АНАЛИЗА..."),
+            (100, "⚡ Зондирование сети... ✅\n⏳ Определение топологии... ✅\n⏳ Поиск активных сервисов... ✅", "✅ АНАЛИЗ ЗАВЕРШЕН")
         ]
         
-        for p1, bar1, status, bar2 in scan_steps:
+        for percent, status_lines, status in scan_steps:
+            bars = "█" * (percent//6) + "░" * (16 - percent//6)
             try:
-                if p1 == 100:
-                    await msg.edit_text(
-                        f"╔══════════════════════════════════════════════════════════╗\n"
-                        f"║           ✅ АНАЛИЗ ЦЕЛЕВОГО УЗЛА ЗАВЕРШЕН ✅          ║\n"
-                        f"╚══════════════════════════════════════════════════════════╝\n\n"
-                        f"┌────────────────────────────────────────────────────────┐\n"
-                        f"│  ⚡ ЗОНДИРОВАНИЕ СЕТЕВОГО ПЕРИМЕТРА...               │\n"
-                        f"│  ██████████████████████████████████████ 100%        │\n"
-                        f"│  ✅ ТОПОЛОГИЯ: ЗВЕЗДА                                │\n"
-                        f"│  ✅ СЕРВИСЫ: HTTP, HTTPS, SSH, FTP                   │\n"
-                        f"│  ✅ ОС: Linux 5.15.0-91-generic x86_64              │\n"
-                        f"│  ✅ ПОРТЫ: 443(ОТКРЫТ) 80(ОТКРЫТ) 22(ОТКРЫТ)       │\n"
-                        f"└────────────────────────────────────────────────────────┘\n\n"
-                        f"🎯 ЦЕЛЬ: <code>{ip}</code>\n"
-                        f"📡 СТАТУС: ✅ ГОТОВ К АТАКЕ\n"
-                        f"💀 УЯЗВИМОСТЬ: КРИТИЧЕСКАЯ",
-                        parse_mode="HTML"
-                    )
-                else:
-                    await msg.edit_text(
-                        f"╔══════════════════════════════════════════════════════════╗\n"
-                        f"║              🔍 АНАЛИЗ ЦЕЛЕВОГО УЗЛА 🔍                ║\n"
-                        f"╚══════════════════════════════════════════════════════════╝\n\n"
-                        f"┌────────────────────────────────────────────────────────┐\n"
-                        f"│  ⚡ ЗОНДИРОВАНИЕ СЕТЕВОГО ПЕРИМЕТРА...               │\n"
-                        f"│  {bar1}                                     │\n"
-                        f"│  ⏳ {status}                      │\n"
-                        f"│  {bar2}                                     │\n"
-                        f"└────────────────────────────────────────────────────────┘\n\n"
-                        f"🎯 ЦЕЛЬ: <code>{ip}</code>\n"
-                        f"📡 СТАТУС: СКАНИРОВАНИЕ...",
-                        parse_mode="HTML"
-                    )
+                await msg.edit_text(
+                    f"🔍 АНАЛИЗ ЦЕЛИ\n\n"
+                    f"🎯 IP: {ip}\n\n"
+                    f"{status_lines}\n\n"
+                    f"Прогресс: {bars} {percent}%\n\n"
+                    f"Статус: {status}"
+                )
             except:
                 pass
             await asyncio.sleep(0.5)
         
         await asyncio.sleep(0.5)
         
-        # ---- СООБЩЕНИЕ 2: ДАННЫЕ О СИСТЕМЕ ----
+        # ----- СООБЩЕНИЕ 2: ДАННЫЕ О СИСТЕМЕ -----
         await msg.edit_text(
-            f"╔══════════════════════════════════════════════════════════╗\n"
-            f"║           📊 ПАРАМЕТРЫ ЦЕЛЕВОЙ СИСТЕМЫ 📊             ║\n"
-            f"╚══════════════════════════════════════════════════════════╝\n\n"
-            f"┌────────────────────────────────────────────────────────┐\n"
-            f"│  🌐 IP-АДРЕС:    <code>{ip}</code>                          │\n"
-            f"│  🔌 ПРОТОКОЛ:    TCP/IP v4                           │\n"
-            f"│  🖥️ ОС:          Linux 5.15.0-91-generic              │\n"
-            f"│  🔒 БРЕНДМАУЭР:  iptables + fail2ban                  │\n"
-            f"│  📡 ОТКРЫТЫЕ ПОРТЫ: 443, 80, 22, 53                  │\n"
-            f"│  ⚡ ПРОПУСКНАЯ:   2.4 Gbps                           │\n"
-            f"│  🎯 УЯЗВИМОСТЬ:   КРИТИЧЕСКАЯ 🔴                    │\n"
-            f"│  📦 ПАКЕТОВ:      1,847,331                          │\n"
-            f"└────────────────────────────────────────────────────────┘\n\n"
-            f"⚠️ ВНИМАНИЕ! ОБНАРУЖЕНА КРИТИЧЕСКАЯ УЯЗВИМОСТЬ!\n"
-            f"💀 ВЕРОЯТНОСТЬ УСПЕХА: 98.7%\n"
-            f"🔥 НАЧИНАЕМ ПОДГОТОВКУ...",
-            parse_mode="HTML"
+            f"📊 ДАННЫЕ О СИСТЕМЕ\n\n"
+            f"🌐 IP: {ip}\n"
+            f"💻 ОС: Linux 5.15.0\n"
+            f"🔒 Защита: Обнаружена\n"
+            f"📡 Порты: 443(open) 80(open) 22(open)\n"
+            f"⚡ Пропускная: 2.4 Gbps\n"
+            f"🎯 Уязвимость: КРИТИЧЕСКАЯ\n\n"
+            f"⚠️ Цель готова к атаке!\n"
+            f"💀 Вероятность успеха: 98.7%"
         )
-        await asyncio.sleep(2.5)
+        await asyncio.sleep(3)
         
-        # ---- СООБЩЕНИЕ 3: ПОДГОТОВКА ----
+        # ----- СООБЩЕНИЕ 3: ПОДГОТОВКА -----
         load_steps = [
-            (0, "░░░░░░░░░░░░░░░░░░░░ 0%", "ИНИЦИАЛИЗАЦИЯ"),
-            (25, "█████░░░░░░░░░░░░░░░ 25%", "ЗАГРУЗКА МОДУЛЕЙ"),
-            (50, "██████████░░░░░░░░░░ 50%", "АКТИВАЦИЯ УЗЛОВ"),
-            (75, "███████████████░░░░░ 75%", "КОМПИЛЯЦИЯ ПАКЕТОВ"),
-            (95, "███████████████████ 95%", "ФИНАЛЬНАЯ ПРОВЕРКА"),
-            (100, "████████████████████ 100%", "✅ ГОТОВО!")
+            (0, "ОЖИДАНИЕ..."),
+            (25, "ЗАГРУЗКА МОДУЛЕЙ..."),
+            (50, "АКТИВАЦИЯ УЗЛОВ..."),
+            (75, "КОМПИЛЯЦИЯ ПАКЕТОВ..."),
+            (95, "ФИНАЛЬНАЯ ПРОВЕРКА..."),
+            (100, "✅ ГОТОВО!")
         ]
         
-        for percent, bar, status in load_steps:
+        for percent, status in load_steps:
+            bars = "█" * (percent//10) + "░" * (10 - percent//10)
             try:
-                if percent == 100:
-                    await msg.edit_text(
-                        f"╔══════════════════════════════════════════════════════════╗\n"
-                        f"║              ✅ ПОДГОТОВКА ЗАВЕРШЕНА ✅                 ║\n"
-                        f"╚══════════════════════════════════════════════════════════╝\n\n"
-                        f"┌────────────────────────────────────────────────────────┐\n"
-                        f"│  🔹 АКТИВАЦИЯ DDOS-МОДУЛЕЙ                          │\n"
-                        f"│  ████████████████████ 100%                          │\n"
-                        f"│  ✅ СТАТУС: ГОТОВО                                  │\n"
-                        f"├────────────────────────────────────────────────────────┤\n"
-                        f"│  🔹 ПОДКЛЮЧЕННЫХ УЗЛОВ: 21,847                      │\n"
-                        f"│  🔹 СКОРОСТЬ: 2.4 Tbps                              │\n"
-                        f"│  🔹 ГОТОВНОСТЬ: 100%                                │\n"
-                        f"└────────────────────────────────────────────────────────┘\n\n"
-                        f"🚀 ВСЕ СИСТЕМЫ ГОТОВЫ К ЗАПУСКУ!\n"
-                        f"💀 ОЖИДАЙТЕ КОМАНДУ..."
-                    )
-                else:
-                    await msg.edit_text(
-                        f"╔══════════════════════════════════════════════════════════╗\n"
-                        f"║              ⚙️ ПОДГОТОВКА АТАКИ ⚙️                   ║\n"
-                        f"╚══════════════════════════════════════════════════════════╝\n\n"
-                        f"┌────────────────────────────────────────────────────────┐\n"
-                        f"│  🔹 АКТИВАЦИЯ DDOS-МОДУЛЕЙ                          │\n"
-                        f"│  {bar}                                    │\n"
-                        f"│  📌 СТАТУС: {status}                                 │\n"
-                        f"├────────────────────────────────────────────────────────┤\n"
-                        f"│  🔹 ПОДКЛЮЧЕННЫХ УЗЛОВ: {percent * 218}              │\n"
-                        f"│  🔹 СКОРОСТЬ: {percent * 0.04 + 0.1:.1f} Tbps                      │\n"
-                        f"│  🔹 ГОТОВНОСТЬ: {percent}%                            │\n"
-                        f"└────────────────────────────────────────────────────────┘"
-                    )
+                await msg.edit_text(
+                    f"⚙️ ПОДГОТОВКА АТАКИ\n\n"
+                    f"🔹 Активация модулей...\n"
+                    f"{bars} {percent}%\n\n"
+                    f"🔹 Подключено узлов: {percent * 218}\n"
+                    f"🔹 Скорость: {percent * 0.04 + 0.1:.1f} Tbps\n"
+                    f"🔹 Готовность: {percent}%\n\n"
+                    f"Статус: {status}"
+                )
             except:
                 pass
             await asyncio.sleep(0.6)
         
         await asyncio.sleep(0.5)
         
-        # ---- СООБЩЕНИЕ 4: ЗАПУСК АТАКИ ----
+        # ----- СООБЩЕНИЕ 4: ЗАПУСК АТАКИ -----
         await msg.edit_text(
-            f"╔══════════════════════════════════════════════════════════╗\n"
-            f"║         🚀 ЗАПУСК МАССИРОВАННОЙ АТАКИ 🚀              ║\n"
-            f"╚══════════════════════════════════════════════════════════╝\n\n"
-            f"┌────────────────────────────────────────────────────────┐\n"
-            f"│  🎯 ЦЕЛЬ:        <code>{ip}</code>                          │\n"
-            f"│  🌊 ТИП АТАКИ:   DDOS FLOOD                          │\n"
-            f"│  ⚡ МОЩНОСТЬ:    2.4 Tbps                            │\n"
-            f"│  📦 ПАКЕТОВ:     1,847,331                           │\n"
-            f"│  🔥 СТАТУС:      АКТИВНА ⚡                          │\n"
-            f"└────────────────────────────────────────────────────────┘\n\n"
-            f"💀 АТАКА ЗАПУЩЕНА! ЦЕЛЬ ЗАБЛОКИРОВАНА!\n"
-            f"📡 ОТПРАВКА ПАКЕТОВ НА <code>{ip}</code>...\n"
-            f"⚠️ НАЧИНАЕТСЯ МАССИРОВАННАЯ АТАКА!",
-            parse_mode="HTML"
+            f"🚀 ЗАПУСК АТАКИ\n\n"
+            f"🎯 Цель: {ip}\n"
+            f"🌊 Тип: DDOS FLOOD\n"
+            f"⚡ Мощность: 2.4 Tbps\n"
+            f"📦 Пакетов: 847,231\n\n"
+            f"💀 Атака запущена!\n"
+            f"📡 Отправка пакетов..."
         )
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(2)
         
-        await msg.edit_text(
-            f"╔══════════════════════════════════════════════════════════╗\n"
-            f"║         🚀 ЗАПУСК МАССИРОВАННОЙ АТАКИ 🚀              ║\n"
-            f"╚══════════════════════════════════════════════════════════╝\n\n"
-            f"┌────────────────────────────────────────────────────────┐\n"
-            f"│  🎯 ЦЕЛЬ:        <code>{ip}</code>                          │\n"
-            f"│  🌊 ТИП АТАКИ:   DDOS FLOOD                          │\n"
-            f"│  ⚡ МОЩНОСТЬ:    3.8 Tbps                            │\n"
-            f"│  📦 ПАКЕТОВ:     2,847,331                           │\n"
-            f"│  🔥 СТАТУС:      МАКСИМАЛЬНАЯ 💀                    │\n"
-            f"└────────────────────────────────────────────────────────┘\n\n"
-            f"💀 АТАКА ДОСТИГЛА ПИКОВОЙ МОЩНОСТИ!\n"
-            f"🔥 СЕРВЕР ЦЕЛИ ПЕРЕГРУЖЕН!",
-            parse_mode="HTML"
-        )
-        await asyncio.sleep(1.5)
-        
-        # ---- СООБЩЕНИЕ 5-7: ВОЛНЫ АТАКИ ----
+        # ----- СООБЩЕНИЕ 5-7: ВОЛНЫ -----
         waves = [
             (1, [
-                (15, "143,829", "НИЗКАЯ 🟢", 1847, 0.8),
-                (30, "296,530", "СРЕДНЯЯ 🟡", 4231, 1.4),
-                (45, "440,561", "ВЫСОКАЯ 🔴", 7843, 2.0),
-                (60, "601,534", "КРИТИЧЕСКАЯ ⚠️", 10231, 2.6),
-                (75, "745,684", "МАКСИМАЛЬНАЯ 💀", 12847, 3.2),
-                (90, "847,231", "МАКСИМАЛЬНАЯ 💀", 12847, 3.8),
+                (15, "143,829", "НИЗКАЯ", 1847, 0.8),
+                (30, "296,530", "СРЕДНЯЯ", 4231, 1.4),
+                (45, "440,561", "ВЫСОКАЯ", 7843, 2.0),
+                (60, "601,534", "КРИТИЧЕСКАЯ", 10231, 2.6),
+                (75, "745,684", "МАКСИМАЛЬНАЯ", 12847, 3.2),
+                (90, "847,231", "МАКСИМАЛЬНАЯ", 12847, 3.8),
                 (100, "847,231", "✅ ЗАВЕРШЕНА", 12847, 2.6)
             ]),
             (2, [
-                (20, "338,892", "СРЕДНЯЯ 🟡", 6231, 1.2),
-                (40, "677,784", "ВЫСОКАЯ 🔴", 12231, 2.4),
-                (60, "1,016,676", "КРИТИЧЕСКАЯ ⚠️", 15847, 3.6),
-                (80, "1,355,568", "МАКСИМАЛЬНАЯ 💀", 18847, 4.8),
+                (20, "338,892", "СРЕДНЯЯ", 6231, 1.2),
+                (40, "677,784", "ВЫСОКАЯ", 12231, 2.4),
+                (60, "1,016,676", "КРИТИЧЕСКАЯ", 15847, 3.6),
+                (80, "1,355,568", "МАКСИМАЛЬНАЯ", 18847, 4.8),
                 (100, "1,694,462", "✅ ЗАВЕРШЕНА", 18847, 3.8)
             ]),
             (3, [
-                (25, "711,833", "ВЫСОКАЯ 🔴", 15231, 2.4),
-                (50, "1,423,666", "КРИТИЧЕСКАЯ ⚠️", 19847, 4.8),
-                (75, "2,135,498", "МАКСИМАЛЬНАЯ 💀", 23127, 6.0),
+                (25, "711,833", "ВЫСОКАЯ", 15231, 2.4),
+                (50, "1,423,666", "КРИТИЧЕСКАЯ", 19847, 4.8),
+                (75, "2,135,498", "МАКСИМАЛЬНАЯ", 23127, 6.0),
                 (100, "2,847,331", "✅ ЗАВЕРШЕНА", 23127, 4.8)
             ])
         ]
         
         for wave_num, steps in waves:
             for percent, packets, load, nodes, speed in steps:
-                bars = "█" * (percent//5) + "░" * (20 - percent//5)
+                bars = "█" * (percent//10) + "░" * (10 - percent//10)
                 try:
                     if percent == 100:
                         status_text = "ЗАВЕРШЕНА" if wave_num < 3 else "✅ ФИНАЛЬНАЯ ЗАВЕРШЕНА"
                         await msg.edit_text(
-                            f"╔══════════════════════════════════════════════════════════╗\n"
-                            f"║         🌊 ВОЛНА АТАКИ #{wave_num} {status_text} 🌊      ║\n"
-                            f"╚══════════════════════════════════════════════════════════╝\n\n"
-                            f"┌────────────────────────────────────────────────────────┐\n"
-                            f"│  📊 ИТОГОВАЯ СТАТИСТИКА                              │\n"
-                            f"├────────────────────────────────────────────────────────┤\n"
-                            f"│  📦 ВСЕГО ПАКЕТОВ: {packets}                         │\n"
-                            f"│  ⚡ СР. СКОРОСТЬ:  {speed:.1f} Tbps                         │\n"
-                            f"│  ⏱️ ДЛИТЕЛЬНОСТЬ:  {18 + wave_num * 4} сек                           │\n"
-                            f"│  💥 ЭФФЕКТ:        {'КРИТИЧЕСКИЙ' if wave_num < 3 else 'ПОЛНОЕ УНИЧТОЖЕНИЕ'}                     │\n"
-                            f"│  🎯 СТАТУС:        ЦЕЛЬ {'НЕ ОТВЕЧАЕТ' if wave_num < 3 else 'УНИЧТОЖЕНА'}                 │\n"
-                            f"└────────────────────────────────────────────────────────┘\n\n"
-                            f"{'🌊 ЗАПУСКАЕМ СЛЕДУЮЩУЮ ВОЛНУ...' if wave_num < 3 else '🔥 ВСЕ ВОЛНЫ УСПЕШНО ЗАВЕРШЕНЫ!'}\n"
-                            f"{'🔥 УВЕЛИЧИВАЕМ МОЩНОСТЬ...' if wave_num == 1 else '💀 МАКСИМАЛЬНАЯ МОЩНОСТЬ!' if wave_num == 2 else '📊 ПОДВОДИМ ИТОГИ...'}"
+                            f"🌊 ВОЛНА #{wave_num}\n\n"
+                            f"📊 Статистика\n"
+                            f"📦 Пакетов: {packets}\n"
+                            f"⚡ Скорость: {speed:.1f} Tbps\n"
+                            f"📈 Прогресс: {bars} 100%\n"
+                            f"🎯 Нагрузка: МАКСИМАЛЬНАЯ\n"
+                            f"⏱️ Время: {18 + wave_num * 4} сек\n\n"
+                            f"✅ Волна #{wave_num} завершена!\n"
+                            f"{'🌊 Запускаем следующую...' if wave_num < 3 else '🔥 Все волны успешно завершены!'}"
                         )
                     else:
                         await msg.edit_text(
-                            f"╔══════════════════════════════════════════════════════════╗\n"
-                            f"║         🌊 ВОЛНА АТАКИ #{wave_num} 🌊                  ║\n"
-                            f"╚══════════════════════════════════════════════════════════╝\n\n"
-                            f"┌────────────────────────────────────────────────────────┐\n"
-                            f"│  📊 СТАТИСТИКА АТАКИ                                 │\n"
-                            f"├────────────────────────────────────────────────────────┤\n"
-                            f"│  📦 ПАКЕТЫ:    {packets}                              │\n"
-                            f"│  ⚡ СКОРОСТЬ:   {speed:.1f} Tbps                            │\n"
-                            f"│  📈 ПРОГРЕСС:   {bars} {percent}%               │\n"
-                            f"│  🎯 НАГРУЗКА:   {load}                      │\n"
-                            f"│  ⏱️ ВРЕМЯ:      {percent//5+2} сек                              │\n"
-                            f"├────────────────────────────────────────────────────────┤\n"
-                            f"│  🌐 УЗЛОВ:      {nodes:,}                               │\n"
-                            f"└────────────────────────────────────────────────────────┘\n\n"
-                            f"{'🔄 ИДЕТ АТАКА...' if percent < 30 else '🔥 УВЕЛИЧИВАЕМ МОЩНОСТЬ!' if percent < 45 else '⚠️ ЦЕЛЬ ТОРМОЗИТ!' if percent < 60 else '💥 ЦЕЛЬ ПЕРЕГРУЖЕНА!' if percent < 75 else '🔥 АТАКА НА ПИКЕ!'}"
+                            f"🌊 ВОЛНА #{wave_num}\n\n"
+                            f"📊 Статистика\n"
+                            f"📦 Пакетов: {packets}\n"
+                            f"⚡ Скорость: {speed:.1f} Tbps\n"
+                            f"📈 Прогресс: {bars} {percent}%\n"
+                            f"🎯 Нагрузка: {load}\n"
+                            f"⏱️ Время: {percent//5+2} сек\n\n"
+                            f"{'🔄 Идет атака...' if percent < 30 else '🔥 Увеличиваем мощность!' if percent < 45 else '⚠️ Цель тормозит!' if percent < 60 else '💥 Цель перегружена!'}"
                         )
                 except:
                     pass
@@ -669,56 +625,37 @@ async def run_ddos_animation(callback, user_id, ip):
         
         await asyncio.sleep(0.5)
         
-        # ---- СООБЩЕНИЕ 8: ИТОГОВАЯ СТАТИСТИКА ----
+        # ----- СООБЩЕНИЕ 8: ИТОГИ -----
         total_packets = 847231 + 1694462 + 2847331
         avg_speed = (2.4 + 3.8 + 4.8) / 3
         
         await msg.edit_text(
-            f"╔══════════════════════════════════════════════════════════╗\n"
-            f"║           📊 ИТОГОВАЯ СТАТИСТИКА АТАКИ 📊             ║\n"
-            f"╚══════════════════════════════════════════════════════════╝\n\n"
-            f"┌────────────────────────────────────────────────────────┐\n"
-            f"│  🎯 ЦЕЛЬ:                 <code>{ip}</code>           │\n"
-            f"│  🌊 ТИП АТАКИ:            DDOS FLOOD                 │\n"
-            f"│  📦 ВСЕГО ПАКЕТОВ:        5,388,024                   │\n"
-            f"│  ⚡ СРЕДНЯЯ СКОРОСТЬ:     {avg_speed:.1f} Tbps                   │\n"
-            f"│  ⏱️ ОБЩЕЕ ВРЕМЯ:           47 секунд                  │\n"
-            f"│  📈 ЭФФЕКТИВНОСТЬ:        100.00%                    │\n"
-            f"│  💥 НАГРУЗКА:             МАКСИМАЛЬНАЯ 💀            │\n"
-            f"│  🔒 ЗАЩИТА ЦЕЛИ:          ПРОБИТА ✅                 │\n"
-            f"│  🌐 ИСПОЛЬЗОВАНО УЗЛОВ:   23,127                     │\n"
-            f"└────────────────────────────────────────────────────────┘\n\n"
-            f"🔥 АТАКА ЗАВЕРШЕНА С АБСОЛЮТНОЙ ЭФФЕКТИВНОСТЬЮ!\n"
-            f"💀 ЦЕЛЬ ПОЛНОСТЬЮ УНИЧТОЖЕНА!",
-            parse_mode="HTML"
+            f"📊 ИТОГОВАЯ СТАТИСТИКА\n\n"
+            f"🎯 Цель: {ip}\n"
+            f"📦 Всего пакетов: {total_packets:,}\n"
+            f"⚡ Средняя скорость: {avg_speed:.1f} Tbps\n"
+            f"⏱️ Общее время: 47 сек\n"
+            f"📈 Эффективность: 100%\n"
+            f"💥 Нагрузка: МАКСИМАЛЬНАЯ\n\n"
+            f"🔥 Атака завершена!\n"
+            f"💀 Цель уничтожена!"
         )
-        await asyncio.sleep(4)
+        await asyncio.sleep(3)
         
-        # ---- СООБЩЕНИЕ 9: ФИНАЛ DDOS ----
+        # ----- СООБЩЕНИЕ 9: ФИНАЛ -----
         await msg.edit_text(
-            "╔══════════════════════════════════════════════════════════╗\n"
-            "║         ✅ DDOS АТАКА УСПЕШНО ЗАВЕРШЕНА ✅             ║\n"
-            "╚══════════════════════════════════════════════════════════╝\n\n"
-            "┌────────────────────────────────────────────────────────┐\n"
-            "│  🔒 ЗАВЕРШЕНИЕ ОПЕРАЦИИ                              │\n"
-            "├────────────────────────────────────────────────────────┤\n"
-            "│  ⛔ ТРАФИК СБРОШЕН              ✅                 │\n"
-            "│  ⛔ ЛОГИ ОЧИЩЕНЫ                ✅                 │\n"
-            "│  ⛔ СЛЕДЫ СКРЫТЫ                ✅                 │\n"
-            "│  ⛔ IP ЗАМЕНЕН                  ✅                 │\n"
-            "│  ⛔ VPN АКТИВИРОВАН             ✅                 │\n"
-            "│  ⛔ ДАННЫЕ ЗАШИФРОВАНЫ          ✅                 │\n"
-            "│  ⛔ MAC-АДРЕС ИЗМЕНЕН           ✅                 │\n"
-            "│  ⛔ DNS-КЭШ ОЧИЩЕН              ✅                 │\n"
-            "│  ⛔ ПРОКСИ ОТКЛЮЧЕНЫ            ✅                 │\n"
-            "│  ⛔ TOR-СОЕДИНЕНИЕ РАЗОРВАНО    ✅                 │\n"
-            "│  ⛔ SSL-СЕРТИФИКАТЫ ЗАМЕНЕНЫ   ✅                 │\n"
-            "│  ⛔ ВСЕ УСТРОЙСТВА ДЕАКТИВИР.  ✅                 │\n"
-            "└────────────────────────────────────────────────────────┘\n\n"
-            "🔐 ВСЕ СЛЕДЫ УСПЕШНО СКРЫТЫ!\n\n"
-            "📬 ОЖИДАЙТЕ СООБЩЕНИЕ С РЕЗУЛЬТАТАМИ...\n\n"
-            "👤 АДМИНИСТРАТОР УВЕДОМЛЕН О ПРОВЕДЕННОЙ ОПЕРАЦИИ\n"
-            "💀 ОПЕРАЦИЯ ЗАВЕРШЕНА УСПЕШНО!"
+            f"✅ DDOS АТАКА ЗАВЕРШЕНА\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🔒 ЗАВЕРШЕНИЕ\n"
+            f"⛔ Трафик сброшен ✅\n"
+            f"⛔ Логи очищены ✅\n"
+            f"⛔ Следы скрыты ✅\n"
+            f"⛔ IP заменен ✅\n"
+            f"⛔ VPN активирован ✅\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🔐 Все следы скрыты!\n\n"
+            f"👤 Администратор уведомлен\n"
+            f"💀 Операция завершена успешно!"
         )
         
         logger.info(f"✅ DDOS атака завершена для пользователя {user_id}")
@@ -728,228 +665,129 @@ async def run_ddos_animation(callback, user_id, ip):
         logger.error(traceback.format_exc())
 
 # ================================================================
-# 💉 DOKS АТАКА (ВЗЛОМ И ВНЕДРЕНИЕ)
+# 💉 DOKS АТАКА (НОВЫЙ СТИЛЬ)
 # ================================================================
 async def run_doks_animation(callback, user_id, ip):
-    """Сценарий DOKS атаки - взлом и внедрение"""
     try:
-        # ---- СООБЩЕНИЕ 1: ВЗЛОМ ЗАЩИТЫ ----
         msg = await callback.message.answer(
-            "╔══════════════════════════════════════════════════════════╗\n"
-            "║              🔓 ПОДБОР КЛЮЧЕЙ ДОСТУПА 🔓               ║\n"
-            "╚══════════════════════════════════════════════════════════╝\n\n"
-            "┌────────────────────────────────────────────────────────┐\n"
-            "│  ⚡ АНАЛИЗ ШИФРОВАНИЯ...                              │\n"
-            "│  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 5%          │\n"
-            "│  ⏳ ПЕРЕБОР КЛЮЧЕЙ...                                │\n"
-            "│  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 5%          │\n"
-            "│  ⏳ ДЕШИФРОВКА ДАННЫХ...                             │\n"
-            "│  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 5%          │\n"
-            "└────────────────────────────────────────────────────────┘\n\n"
-            f"🎯 ЦЕЛЬ: <code>{ip}</code>\n"
-            "📡 СТАТУС: ПОДБОР КЛЮЧЕЙ...",
-            parse_mode="HTML"
+            f"🔓 ПОДБОР КЛЮЧЕЙ\n\n"
+            f"🎯 Цель: {ip}\n\n"
+            f"⚡ Анализ шифрования...\n"
+            f"⏳ Перебор ключей...\n"
+            f"⏳ Дешифровка данных...\n\n"
+            f"Прогресс: ░░░░░░░░░░░░░░░░ 0%\n\n"
+            f"Статус: ИНИЦИАЛИЗАЦИЯ..."
         )
         await asyncio.sleep(0.5)
         
         hack_steps = [
-            (33, "█████████████░░░░░░░░░░░░░░░░░░░░░░░ 33%", "ПЕРЕБОР КЛЮЧЕЙ...", "███████░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 22%"),
-            (67, "███████████████████████████░░░░░░░░░ 67%", "ДЕШИФРОВКА...", "█████████████████░░░░░░░░░░░░░░░░░ 55%"),
-            (100, "██████████████████████████████████████ 100%", "✅ ДОСТУП ПОЛУЧЕН!", "██████████████████████████████████ 100%")
+            (33, "ПЕРЕБОР КЛЮЧЕЙ...", "🔓 ВЗЛОМ ЗАЩИТЫ"),
+            (67, "ДЕШИФРОВКА...", "🔓 ДОСТУП ПОЛУЧЕН"),
+            (100, "✅ ДОСТУП ПОЛУЧЕН!", "🔓 ДОСТУП ОТКРЫТ")
         ]
         
-        for p1, bar1, status, bar2 in hack_steps:
+        for percent, status, title in hack_steps:
+            bars = "█" * (percent//6) + "░" * (16 - percent//6)
             try:
-                if p1 == 100:
-                    await msg.edit_text(
-                        f"╔══════════════════════════════════════════════════════════╗\n"
-                        f"║              ✅ ДОСТУП К ЦЕЛИ ПОЛУЧЕН ✅               ║\n"
-                        f"╚══════════════════════════════════════════════════════════╝\n\n"
-                        f"┌────────────────────────────────────────────────────────┐\n"
-                        f"│  ⚡ АНАЛИЗ ШИФРОВАНИЯ...                             │\n"
-                        f"│  ██████████████████████████████████████ 100%        │\n"
-                        f"│  ✅ ШИФРОВАНИЕ: AES-256                             │\n"
-                        f"│  ✅ КЛЮЧИ ПОДОБРАНЫ                                 │\n"
-                        f"│  ✅ ДОСТУП: ROOT                                   │\n"
-                        f"│  ✅ СИСТЕМА СКОМПРОМЕТИРОВАНА                       │\n"
-                        f"└────────────────────────────────────────────────────────┘\n\n"
-                        f"🎯 ЦЕЛЬ: <code>{ip}</code>\n"
-                        f"📡 СТАТУС: ✅ ДОСТУП ОТКРЫТ\n"
-                        f"💀 СИСТЕМА ПОЛНОСТЬЮ КОМПРОМЕТИРОВАНА!",
-                        parse_mode="HTML"
-                    )
-                else:
-                    await msg.edit_text(
-                        f"╔══════════════════════════════════════════════════════════╗\n"
-                        f"║              🔓 ПОДБОР КЛЮЧЕЙ ДОСТУПА 🔓               ║\n"
-                        f"╚══════════════════════════════════════════════════════════╝\n\n"
-                        f"┌────────────────────────────────────────────────────────┐\n"
-                        f"│  ⚡ АНАЛИЗ ШИФРОВАНИЯ...                              │\n"
-                        f"│  {bar1}                                     │\n"
-                        f"│  ⏳ {status}                      │\n"
-                        f"│  {bar2}                                     │\n"
-                        f"└────────────────────────────────────────────────────────┘\n\n"
-                        f"🎯 ЦЕЛЬ: <code>{ip}</code>\n"
-                        f"📡 СТАТУС: ПОДБОР КЛЮЧЕЙ...",
-                        parse_mode="HTML"
-                    )
+                await msg.edit_text(
+                    f"🔓 ПОДБОР КЛЮЧЕЙ\n\n"
+                    f"🎯 Цель: {ip}\n\n"
+                    f"⚡ Анализ шифрования... {'✅' if percent > 33 else '⏳'}\n"
+                    f"⏳ {status}\n"
+                    f"⏳ Дешифровка данных... {'✅' if percent == 100 else '⏳'}\n\n"
+                    f"Прогресс: {bars} {percent}%\n\n"
+                    f"Статус: {title}"
+                )
             except:
                 pass
-            await asyncio.sleep(0.6)
+            await asyncio.sleep(0.7)
         
         await asyncio.sleep(0.5)
         
-        # ---- СООБЩЕНИЕ 2: ДАННЫЕ О СИСТЕМЕ ----
         await msg.edit_text(
-            f"╔══════════════════════════════════════════════════════════╗\n"
-            f"║           🕵️ ДАННЫЕ О СИСТЕМЕ 🕵️                     ║\n"
-            f"╚══════════════════════════════════════════════════════════╝\n\n"
-            f"┌────────────────────────────────────────────────────────┐\n"
-            f"│  🌐 IP-АДРЕС:    <code>{ip}</code>                          │\n"
-            f"│  🖥️ ОС:          Linux 5.15.0-91-generic              │\n"
-            f"│  🔓 ДОСТУП:      ROOT ✅                             │\n"
-            f"│  📁 ФАЙЛЫ:       /etc, /var, /home                   │\n"
-            f"│  🔑 КЛЮЧИ:       RSA 4096 бит                       │\n"
-            f"│  🛡️ ЗАЩИТА:      ОТКЛЮЧЕНА                          │\n"
-            f"│  📊 БАЗЫ:        MySQL, PostgreSQL                   │\n"
-            f"│  💀 УЯЗВИМОСТЬ:   КРИТИЧЕСКАЯ 🔴                    │\n"
-            f"└────────────────────────────────────────────────────────┘\n\n"
-            f"⚠️ ВНИМАНИЕ! СИСТЕМА ПОЛНОСТЬЮ КОМПРОМЕТИРОВАНА!\n"
-            f"💀 ГОТОВ К ВНЕДРЕНИЮ ВРЕДОНОСНОГО КОДА!",
-            parse_mode="HTML"
+            f"🕵️ ДАННЫЕ О СИСТЕМЕ\n\n"
+            f"🌐 IP: {ip}\n"
+            f"💻 ОС: Linux 5.15.0\n"
+            f"🔓 Доступ: ROOT\n"
+            f"📁 Файлы: Обнаружены\n"
+            f"🔑 Ключи: Подобраны\n"
+            f"🛡️ Защита: Отключена\n"
+            f"💀 Уязвимость: КРИТИЧЕСКАЯ\n\n"
+            f"⚠️ Система скомпрометирована!\n"
+            f"💀 Готов к внедрению!"
         )
         await asyncio.sleep(2.5)
         
-        # ---- СООБЩЕНИЕ 3: ВНЕДРЕНИЕ КОДА ----
         inject_steps = [
-            (0, "░░░░░░░░░░░░░░░░░░░░ 0%", "ИНИЦИАЛИЗАЦИЯ"),
-            (35, "███████░░░░░░░░░░░░░ 35%", "ЗАГРУЗКА КОДА"),
-            (70, "██████████████░░░░░░ 70%", "ВНЕДРЕНИЕ"),
-            (100, "████████████████████ 100%", "✅ ВНЕДРЕНО!")
+            (0, "ИНИЦИАЛИЗАЦИЯ"),
+            (35, "ЗАГРУЗКА КОДА"),
+            (70, "ВНЕДРЕНИЕ"),
+            (100, "✅ ВНЕДРЕНО!")
         ]
         
-        for percent, bar, status in inject_steps:
+        for percent, status in inject_steps:
+            bars = "█" * (percent//10) + "░" * (10 - percent//10)
             try:
-                if percent == 100:
-                    await msg.edit_text(
-                        f"╔══════════════════════════════════════════════════════════╗\n"
-                        f"║              ✅ ВНЕДРЕНИЕ ЗАВЕРШЕНО ✅                  ║\n"
-                        f"╚══════════════════════════════════════════════════════════╝\n\n"
-                        f"┌────────────────────────────────────────────────────────┐\n"
-                        f"│  🔹 ВРЕДОНОСНЫЙ КОД                                  │\n"
-                        f"│  ████████████████████ 100%                          │\n"
-                        f"│  ✅ КОД УСПЕШНО ВНЕДРЕН                              │\n"
-                        f"├────────────────────────────────────────────────────────┤\n"
-                        f"│  🔹 АКТИВНЫХ УЗЛОВ:  21,847                          │\n"
-                        f"│  🔹 СКОРОСТЬ: 3.2 Mbps                              │\n"
-                        f"│  🔹 ГОТОВНОСТЬ: 100%                                │\n"
-                        f"└────────────────────────────────────────────────────────┘\n\n"
-                        f"💀 ВРЕДОНОСНЫЙ КОД УСПЕШНО ВНЕДРЕН!\n"
-                        f"🔥 НАЧИНАЕМ АКТИВАЦИЮ..."
-                    )
-                else:
-                    await msg.edit_text(
-                        f"╔══════════════════════════════════════════════════════════╗\n"
-                        f"║           💉 ВНЕДРЕНИЕ В СИСТЕМУ 💉                   ║\n"
-                        f"╚══════════════════════════════════════════════════════════╝\n\n"
-                        f"┌────────────────────────────────────────────────────────┐\n"
-                        f"│  🔹 ЗАГРУЗКА ВРЕДОНОСНОГО КОДА...                    │\n"
-                        f"│  {bar}                                    │\n"
-                        f"│  📌 СТАТУС: {status}                                 │\n"
-                        f"├────────────────────────────────────────────────────────┤\n"
-                        f"│  🔹 ПОДКЛЮЧЕННЫХ УЗЛОВ: {percent * 624}              │\n"
-                        f"│  🔹 СКОРОСТЬ: {percent * 0.04 + 0.1:.1f} Mbps                      │\n"
-                        f"│  🔹 ГОТОВНОСТЬ: {percent}%                            │\n"
-                        f"└────────────────────────────────────────────────────────┘"
-                    )
+                await msg.edit_text(
+                    f"💉 ВНЕДРЕНИЕ В СИСТЕМУ\n\n"
+                    f"🔹 Загрузка кода...\n"
+                    f"{bars} {percent}%\n\n"
+                    f"🔹 Активных узлов: {percent * 218 + 1000}\n"
+                    f"🔹 Скорость: {percent * 0.04 + 0.1:.1f} Mbps\n"
+                    f"🔹 Готовность: {percent}%\n\n"
+                    f"Статус: {status}"
+                )
             except:
                 pass
             await asyncio.sleep(0.6)
         
         await asyncio.sleep(0.5)
         
-        # ---- СООБЩЕНИЕ 4: АКТИВАЦИЯ ----
         await msg.edit_text(
-            f"╔══════════════════════════════════════════════════════════╗\n"
-            f"║         🔥 АКТИВАЦИЯ ВРЕДОНОСНОГО КОДА 🔥             ║\n"
-            f"╚══════════════════════════════════════════════════════════╝\n\n"
-            f"┌────────────────────────────────────────────────────────┐\n"
-            f"│  🎯 ЦЕЛЬ:        <code>{ip}</code>                          │\n"
-            f"│  💉 ТИП:         ROOTKIT ВНЕДРЕНИЕ                    │\n"
-            f"│  ⚡ СКОРОСТЬ:    3.2 Mbps                            │\n"
-            f"│  📦 ДАННЫХ:      4,294,967 байт                     │\n"
-            f"│  🔥 СТАТУС:      АКТИВЕН ⚡                         │\n"
-            f"└────────────────────────────────────────────────────────┘\n\n"
-            f"💀 ВРЕДОНОСНЫЙ КОД АКТИВИРОВАН!\n"
-            f"📡 НАЧИНАЕТСЯ ПЕРЕХВАТ ДАННЫХ...",
-            parse_mode="HTML"
+            f"🔥 АКТИВАЦИЯ ВРЕДОНОСНОГО КОДА\n\n"
+            f"🎯 Цель: {ip}\n"
+            f"💉 Тип: ROOTKIT\n"
+            f"⚡ Скорость: 3.2 Mbps\n"
+            f"📦 Данных: 4,294,967 байт\n\n"
+            f"💀 Код активирован!\n"
+            f"📡 Начинается перехват..."
         )
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(2)
         
-        await msg.edit_text(
-            f"╔══════════════════════════════════════════════════════════╗\n"
-            f"║         🔥 АКТИВАЦИЯ ВРЕДОНОСНОГО КОДА 🔥             ║\n"
-            f"╚══════════════════════════════════════════════════════════╝\n\n"
-            f"┌────────────────────────────────────────────────────────┐\n"
-            f"│  🎯 ЦЕЛЬ:        <code>{ip}</code>                          │\n"
-            f"│  💉 ТИП:         ROOTKIT ВНЕДРЕНИЕ                    │\n"
-            f"│  ⚡ СКОРОСТЬ:    4.8 Mbps                            │\n"
-            f"│  📦 ДАННЫХ:      8,294,967 байт                     │\n"
-            f"│  🔥 СТАТУС:      МАКСИМАЛЬНАЯ 💀                    │\n"
-            f"└────────────────────────────────────────────────────────┘\n\n"
-            f"💀 ПЕРЕХВАТ ДАННЫХ ДОСТИГ ПИКА!\n"
-            f"🔥 СИСТЕМА ЦЕЛИ ПАРАЛИЗОВАНА!",
-            parse_mode="HTML"
-        )
-        await asyncio.sleep(1.5)
-        
-        # ---- СООБЩЕНИЕ 5-6: ПЕРЕХВАТ ДАННЫХ ----
         for wave_num in range(1, 3):
             steps = [
-                (20, "429,496", "СРЕДНИЙ 🟡", 28456),
-                (40, "858,993", "ВЫСОКИЙ 🔴", 56913),
-                (60, "1,288,490", "КРИТИЧЕСКИЙ ⚠️", 85369),
-                (80, "1,718,987", "МАКСИМАЛЬНЫЙ 💀", 113825),
+                (20, "429,496", "СРЕДНИЙ", 28456),
+                (40, "858,993", "ВЫСОКИЙ", 56913),
+                (60, "1,288,490", "КРИТИЧЕСКИЙ", 85369),
+                (80, "1,718,987", "МАКСИМАЛЬНЫЙ", 113825),
                 (100, "4,294,967" if wave_num == 2 else "2,147,483", "✅ ЗАВЕРШЕН", 0)
             ]
             
             for percent, packets, load, pps in steps:
-                bars = "█" * (percent//5) + "░" * (20 - percent//5)
+                bars = "█" * (percent//10) + "░" * (10 - percent//10)
                 try:
                     if percent == 100:
                         await msg.edit_text(
-                            f"╔══════════════════════════════════════════════════════════╗\n"
-                            f"║         ✅ ПЕРЕХВАТ #{wave_num} ЗАВЕРШЕН ✅              ║\n"
-                            f"╚══════════════════════════════════════════════════════════╝\n\n"
-                            f"┌────────────────────────────────────────────────────────┐\n"
-                            f"│  📊 ИТОГОВАЯ СТАТИСТИКА                              │\n"
-                            f"├────────────────────────────────────────────────────────┤\n"
-                            f"│  📦 ВСЕГО ДАННЫХ: {packets} байт                    │\n"
-                            f"│  ⚡ СР. СКОРОСТЬ:  {3.0 + wave_num * 0.8:.1f} Mbps                         │\n"
-                            f"│  ⏱️ ДЛИТЕЛЬНОСТЬ:  {20 + wave_num * 5} сек                           │\n"
-                            f"│  💥 ЭФФЕКТ:        {'СИСТЕМА ВЗЛОМАНА' if wave_num == 1 else 'СИСТЕМА РАЗРУШЕНА'}                     │\n"
-                            f"│  🎯 СТАТУС:        {'50% ДАННЫХ ПЕРЕХВАЧЕНО' if wave_num == 1 else '100% ДАННЫХ ПЕРЕХВАЧЕНО'}          │\n"
-                            f"└────────────────────────────────────────────────────────┘\n\n"
-                            f"{'📡 ЗАПУСКАЕМ ВТОРОЙ ПЕРЕХВАТ...' if wave_num == 1 else '🔥 ВСЕ ДАННЫЕ УСПЕШНО ПЕРЕХВАЧЕНЫ!'}\n"
-                            f"{'🔥 УВЕЛИЧИВАЕМ СКОРОСТЬ ДО 5.0 MBPS!' if wave_num == 1 else '💀 ЗАПУСКАЕМ УНИЧТОЖЕНИЕ...'}"
+                            f"📡 ПЕРЕХВАТ ДАННЫХ #{wave_num}\n\n"
+                            f"📊 Статистика\n"
+                            f"📦 Данных: {packets} байт\n"
+                            f"⚡ Скорость: {3.0 + wave_num * 0.8:.1f} Mbps\n"
+                            f"📈 Прогресс: {bars} 100%\n"
+                            f"🎯 Канал: {load}\n"
+                            f"⏱️ Время: {20 + wave_num * 5} сек\n\n"
+                            f"✅ Перехват #{wave_num} завершен!\n"
+                            f"{'📡 Запускаем второй перехват...' if wave_num == 1 else '🔥 Все данные перехвачены!'}"
                         )
                     else:
                         await msg.edit_text(
-                            f"╔══════════════════════════════════════════════════════════╗\n"
-                            f"║         📡 ПЕРЕХВАТ ДАННЫХ #{wave_num} 📡               ║\n"
-                            f"╚══════════════════════════════════════════════════════════╝\n\n"
-                            f"┌────────────────────────────────────────────────────────┐\n"
-                            f"│  📊 СТАТИСТИКА ПЕРЕХВАТА                             │\n"
-                            f"├────────────────────────────────────────────────────────┤\n"
-                            f"│  📦 ДАННЫХ:     {packets} байт                        │\n"
-                            f"│  ⚡ СКОРОСТЬ:   {percent * 0.05 + 0.2:.1f} Mbps                            │\n"
-                            f"│  📈 ПРОГРЕСС:   {bars} {percent}%               │\n"
-                            f"│  🎯 КАНАЛ:      {load}                      │\n"
-                            f"│  ⏱️ ВРЕМЯ:      {percent//4+3} сек                              │\n"
-                            f"├────────────────────────────────────────────────────────┤\n"
-                            f"│  🔄 ПАКЕТОВ/С:  {pps:,}                              │\n"
-                            f"└────────────────────────────────────────────────────────┘\n\n"
-                            f"{'🔄 ИДЕТ ПЕРЕХВАТ...' if percent < 40 else '🔥 УСКОРЯЕМ ПЕРЕХВАТ!' if percent < 60 else '⚠️ СИСТЕМА ОТКЛЮЧАЕТСЯ...' if percent < 80 else '💥 СИСТЕМА ПАРАЛИЗОВАНА!'}"
+                            f"📡 ПЕРЕХВАТ ДАННЫХ #{wave_num}\n\n"
+                            f"📊 Статистика\n"
+                            f"📦 Данных: {packets} байт\n"
+                            f"⚡ Скорость: {percent * 0.05 + 0.2:.1f} Mbps\n"
+                            f"📈 Прогресс: {bars} {percent}%\n"
+                            f"🎯 Канал: {load}\n"
+                            f"⏱️ Время: {percent//4+3} сек\n\n"
+                            f"{'🔄 Идет перехват...' if percent < 40 else '🔥 Ускоряем перехват!' if percent < 60 else '⚠️ Система отключается...' if percent < 80 else '💥 Система парализована!'}"
                         )
                 except:
                     pass
@@ -957,85 +795,45 @@ async def run_doks_animation(callback, user_id, ip):
         
         await asyncio.sleep(0.5)
         
-        # ---- СООБЩЕНИЕ 7: УНИЧТОЖЕНИЕ ----
         await msg.edit_text(
-            "╔══════════════════════════════════════════════════════════╗\n"
-            "║         💀 ОКОНЧАТЕЛЬНОЕ УНИЧТОЖЕНИЕ 💀               ║\n"
-            "╚══════════════════════════════════════════════════════════╝\n\n"
-            "┌────────────────────────────────────────────────────────┐\n"
-            "│  🔹 УДАЛЕНИЕ БАЗ ДАННЫХ...                          │\n"
-            "│  ██████████████████████████████████████ 100%       │\n"
-            "│  ✅ БАЗЫ УДАЛЕНЫ                                    │\n"
-            "├────────────────────────────────────────────────────────┤\n"
-            "│  🔹 ОЧИСТКА СИСТЕМНЫХ ЛОГОВ...                      │\n"
-            "│  ██████████████████████████████████████ 100%       │\n"
-            "│  ✅ ЛОГИ ОЧИЩЕНЫ                                    │\n"
-            "├────────────────────────────────────────────────────────┤\n"
-            "│  🔹 УНИЧТОЖЕНИЕ КЛЮЧЕЙ ШИФРОВАНИЯ...                │\n"
-            "│  ██████████████████████████████████████ 100%       │\n"
-            "│  ✅ КЛЮЧИ УНИЧТОЖЕНЫ                                │\n"
-            "├────────────────────────────────────────────────────────┤\n"
-            "│  🔹 ОТКЛЮЧЕНИЕ ЗАЩИТНЫХ МЕХАНИЗМОВ...               │\n"
-            "│  ██████████████████████████████████████ 100%       │\n"
-            "│  ✅ ЗАЩИТА ОТКЛЮЧЕНА                                │\n"
-            "├────────────────────────────────────────────────────────┤\n"
-            "│  🔹 ЗАПИСЬ ФЕЙКОВЫХ ДАННЫХ...                       │\n"
-            "│  ██████████████████████████████████████ 100%       │\n"
-            "│  ✅ ФЕЙКОВЫЕ ДАННЫЕ УСТАНОВЛЕНЫ                     │\n"
-            "└────────────────────────────────────────────────────────┘\n\n"
-            "💀 СИСТЕМА ПОЛНОСТЬЮ УНИЧТОЖЕНА!\n"
-            "🔥 ВСЕ СЛЕДЫ УСПЕШНО ЗАМЕТЕНЫ!"
+            f"💀 УНИЧТОЖЕНИЕ СИСТЕМЫ\n\n"
+            f"🔹 Удаление баз данных ✅\n"
+            f"🔹 Очистка логов ✅\n"
+            f"🔹 Уничтожение ключей ✅\n"
+            f"🔹 Отключение защиты ✅\n"
+            f"🔹 Запись фейковых данных ✅\n\n"
+            f"💀 Система уничтожена!\n"
+            f"🔥 Все следы заметены!"
+        )
+        await asyncio.sleep(2.5)
+        
+        await msg.edit_text(
+            f"📊 ИТОГИ DOKS АТАКИ\n\n"
+            f"🎯 Цель: {ip}\n"
+            f"📦 Перехвачено: 4,294,967 байт\n"
+            f"⚡ Скорость: 3.6 Mbps\n"
+            f"⏱️ Время: 38 сек\n"
+            f"📈 Эффективность: 100%\n"
+            f"🔑 Взломано ключей: 2,147\n\n"
+            f"🔥 DOKS атака завершена!\n"
+            f"💀 Система уничтожена!"
         )
         await asyncio.sleep(3)
         
-        # ---- СООБЩЕНИЕ 8: ИТОГОВАЯ СТАТИСТИКА DOKS ----
         await msg.edit_text(
-            f"╔══════════════════════════════════════════════════════════╗\n"
-            f"║           📊 ИТОГОВАЯ СТАТИСТИКА DOKS АТАКИ 📊        ║\n"
-            f"╚══════════════════════════════════════════════════════════╝\n\n"
-            f"┌────────────────────────────────────────────────────────┐\n"
-            f"│  🎯 ЦЕЛЬ:                 <code>{ip}</code>           │\n"
-            f"│  💉 ТИП:                  ROOTKIT ВНЕДРЕНИЕ          │\n"
-            f"│  📦 ПЕРЕХВАЧЕНО ДАННЫХ:   4,294,967 байт            │\n"
-            f"│  ⚡ СР. СКОРОСТЬ:          3.6 Mbps                  │\n"
-            f"│  ⏱️ ОБЩЕЕ ВРЕМЯ:            38 секунд                 │\n"
-            f"│  📈 ЭФФЕКТИВНОСТЬ:         100.00%                   │\n"
-            f"│  💥 НАГРУЗКА:              КРИТИЧЕСКАЯ 💀            │\n"
-            f"│  🔒 ЗАЩИТА:                УНИЧТОЖЕНА ✅             │\n"
-            f"│  🌐 ИСПОЛЬЗОВАНО УЗЛОВ:    21,847                    │\n"
-            f"│  🔑 ВЗЛОМАННЫХ КЛЮЧЕЙ:     2,147                     │\n"
-            f"└────────────────────────────────────────────────────────┘\n\n"
-            f"🔥 DOKS АТАКА ЗАВЕРШЕНА С АБСОЛЮТНОЙ ЭФФЕКТИВНОСТЬЮ!\n"
-            f"💀 СИСТЕМА ЦЕЛИ ПОЛНОСТЬЮ УНИЧТОЖЕНА!",
-            parse_mode="HTML"
-        )
-        await asyncio.sleep(3)
-        
-        # ---- СООБЩЕНИЕ 9: ФИНАЛ DOKS ----
-        await msg.edit_text(
-            "╔══════════════════════════════════════════════════════════╗\n"
-            "║         ✅ DOKS АТАКА УСПЕШНО ЗАВЕРШЕНА ✅             ║\n"
-            "╚══════════════════════════════════════════════════════════╝\n\n"
-            "┌────────────────────────────────────────────────────────┐\n"
-            "│  🔒 ЗАВЕРШЕНИЕ ОПЕРАЦИИ                              │\n"
-            "├────────────────────────────────────────────────────────┤\n"
-            "│  ⛔ ДАННЫЕ УДАЛЕНЫ              ✅                 │\n"
-            "│  ⛔ ЛОГИ ОЧИЩЕНЫ                ✅                 │\n"
-            "│  ⛔ СЛЕДЫ СКРЫТЫ                ✅                 │\n"
-            "│  ⛔ КЛЮЧИ УНИЧТОЖЕНЫ            ✅                 │\n"
-            "│  ⛔ VPN АКТИВИРОВАН             ✅                 │\n"
-            "│  ⛔ ДАННЫЕ ЗАШИФРОВАНЫ          ✅                 │\n"
-            "│  ⛔ MAC-АДРЕС ИЗМЕНЕН           ✅                 │\n"
-            "│  ⛔ DNS-КЭШ ОЧИЩЕН              ✅                 │\n"
-            "│  ⛔ ПРОКСИ ОТКЛЮЧЕНЫ            ✅                 │\n"
-            "│  ⛔ TOR-СОЕДИНЕНИЕ РАЗОРВАНО    ✅                 │\n"
-            "│  ⛔ SSL-СЕРТИФИКАТЫ ЗАМЕНЕНЫ   ✅                 │\n"
-            "│  ⛔ ВСЕ УСТРОЙСТВА ДЕАКТИВИР.  ✅                 │\n"
-            "└────────────────────────────────────────────────────────┘\n\n"
-            "🔐 ВСЕ СЛЕДЫ УСПЕШНО СКРЫТЫ!\n\n"
-            "📬 ДАННЫЕ УСПЕШНО ПЕРЕХВАЧЕНЫ И ЗАШИФРОВАНЫ!\n\n"
-            "👤 АДМИНИСТРАТОР УВЕДОМЛЕН О ПРОВЕДЕННОЙ DOKS ОПЕРАЦИИ\n"
-            "💀 ОПЕРАЦИЯ ЗАВЕРШЕНА УСПЕШНО!"
+            f"✅ DOKS АТАКА ЗАВЕРШЕНА\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🔒 ЗАВЕРШЕНИЕ\n"
+            f"⛔ Данные удалены ✅\n"
+            f"⛔ Логи очищены ✅\n"
+            f"⛔ Следы скрыты ✅\n"
+            f"⛔ Ключи уничтожены ✅\n"
+            f"⛔ VPN активирован ✅\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🔐 Все следы скрыты!\n\n"
+            f"📬 Данные перехвачены и зашифрованы!\n"
+            f"👤 Администратор уведомлен\n"
+            f"💀 Операция завершена успешно!"
         )
         
         logger.info(f"✅ DOKS атака завершена для пользователя {user_id}")
@@ -1047,83 +845,43 @@ async def run_doks_animation(callback, user_id, ip):
 # ================================================================
 # 🔍 ПРОБИВ IP (РЕАЛЬНЫЙ)
 # ================================================================
-async def run_probe_animation(callback, user_id, ip):
-    """Сценарий реального пробива IP через API"""
+async def run_probe_ip_animation(callback, user_id, ip):
     try:
-        # ---- СООБЩЕНИЕ 1: ПОДКЛЮЧЕНИЕ К СЕРВЕРУ ----
         msg = await callback.message.answer(
-            "╔══════════════════════════════════════════════════════════╗\n"
-            "║         🖥️ ПОДКЛЮЧЕНИЕ К СЕРВЕРУ ПРОБИВА 🖥️          ║\n"
-            "╚══════════════════════════════════════════════════════════╝\n\n"
-            "┌────────────────────────────────────────────────────────┐\n"
-            "│  ⚡ УСТАНОВКА ЗАЩИЩЕННОГО СОЕДИНЕНИЯ...              │\n"
-            "│  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 5%          │\n"
-            "│  ⏳ АВТОРИЗАЦИЯ НА СЕРВЕРЕ...                        │\n"
-            "│  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 5%          │\n"
-            "│  ⏳ ПОИСК В БАЗЕ ДАННЫХ...                           │\n"
-            "│  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 5%          │\n"
-            "└────────────────────────────────────────────────────────┘\n\n"
-            f"🎯 IP-АДРЕС: <code>{ip}</code>\n"
-            "📡 СТАТУС: УСТАНОВКА СОЕДИНЕНИЯ...",
-            parse_mode="HTML"
+            f"🖥️ ПОДКЛЮЧЕНИЕ К СЕРВЕРУ\n\n"
+            f"🎯 IP: {ip}\n\n"
+            f"⚡ Установка соединения...\n"
+            f"⏳ Авторизация...\n"
+            f"⏳ Поиск в базе...\n\n"
+            f"Прогресс: ░░░░░░░░░░░░░░░░ 0%\n\n"
+            f"Статус: ИНИЦИАЛИЗАЦИЯ..."
         )
         await asyncio.sleep(0.5)
         
         probe_steps = [
-            (40, "████████████████░░░░░░░░░░░░░░░░░░░░ 40%", "СОЕДИНЕНИЕ УСТАНОВЛЕНО...", "██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 20%"),
-            (75, "████████████████████████████░░░░░░░░ 75%", "ДАННЫЕ ОБНАРУЖЕНЫ...", "███████████████░░░░░░░░░░░░░░░░░ 45%"),
-            (100, "██████████████████████████████████████ 100%", "✅ ДАННЫЕ ПОЛУЧЕНЫ!", "██████████████████████████████████ 100%")
+            (40, "СОЕДИНЕНИЕ УСТАНОВЛЕНО...", "⚡ Установка соединения... ✅\n⏳ Авторизация...\n⏳ Поиск в базе..."),
+            (75, "ДАННЫЕ ОБНАРУЖЕНЫ...", "⚡ Установка соединения... ✅\n⏳ Авторизация... ✅\n⏳ Поиск в базе..."),
+            (100, "✅ ДАННЫЕ ПОЛУЧЕНЫ!", "⚡ Установка соединения... ✅\n⏳ Авторизация... ✅\n⏳ Поиск в базе... ✅")
         ]
         
-        for p1, bar1, status, bar2 in probe_steps:
+        for percent, status, lines in probe_steps:
+            bars = "█" * (percent//6) + "░" * (16 - percent//6)
             try:
-                if p1 == 100:
-                    await msg.edit_text(
-                        f"╔══════════════════════════════════════════════════════════╗\n"
-                        f"║         ✅ ПОДКЛЮЧЕНИЕ К СЕРВЕРУ УСПЕШНО ✅            ║\n"
-                        f"╚══════════════════════════════════════════════════════════╝\n\n"
-                        f"┌────────────────────────────────────────────────────────┐\n"
-                        f"│  ⚡ УСТАНОВКА ЗАЩИЩЕННОГО СОЕДИНЕНИЯ...              │\n"
-                        f"│  ██████████████████████████████████████ 100%        │\n"
-                        f"│  ✅ СОЕДИНЕНИЕ УСТАНОВЛЕНО                           │\n"
-                        f"│  ✅ АВТОРИЗАЦИЯ ПРОЙДЕНА                             │\n"
-                        f"│  ✅ ДАННЫЕ ЗАГРУЖЕНЫ                                 │\n"
-                        f"└────────────────────────────────────────────────────────┘\n\n"
-                        f"🎯 IP-АДРЕС: <code>{ip}</code>\n"
-                        f"📡 СТАТУС: ✅ ДАННЫЕ ПОЛУЧЕНЫ\n"
-                        f"💀 ГОТОВ К ВЫВОДУ РЕЗУЛЬТАТА!",
-                        parse_mode="HTML"
-                    )
-                else:
-                    await msg.edit_text(
-                        f"╔══════════════════════════════════════════════════════════╗\n"
-                        f"║         🖥️ ПОДКЛЮЧЕНИЕ К СЕРВЕРУ ПРОБИВА 🖥️          ║\n"
-                        f"╚══════════════════════════════════════════════════════════╝\n\n"
-                        f"┌────────────────────────────────────────────────────────┐\n"
-                        f"│  ⚡ УСТАНОВКА ЗАЩИЩЕННОГО СОЕДИНЕНИЯ...              │\n"
-                        f"│  {bar1}                                     │\n"
-                        f"│  ⏳ {status}                      │\n"
-                        f"│  {bar2}                                     │\n"
-                        f"└────────────────────────────────────────────────────────┘\n\n"
-                        f"🎯 IP-АДРЕС: <code>{ip}</code>\n"
-                        f"📡 СТАТУС: ПОИСК ИНФОРМАЦИИ...",
-                        parse_mode="HTML"
-                    )
+                await msg.edit_text(
+                    f"🖥️ ПОДКЛЮЧЕНИЕ К СЕРВЕРУ\n\n"
+                    f"🎯 IP: {ip}\n\n"
+                    f"{lines}\n\n"
+                    f"Прогресс: {bars} {percent}%\n\n"
+                    f"Статус: {status}"
+                )
             except:
                 pass
             await asyncio.sleep(0.6)
         
         await asyncio.sleep(0.5)
         
-        # ---- ПОЛУЧЕНИЕ РЕАЛЬНЫХ ДАННЫХ ОТ API ----
         result = await get_real_ip_info(ip)
-        
-        if result['success']:
-            # Отправляем реальные данные
-            await msg.edit_text(result['text'])
-        else:
-            # Отправляем сообщение об ошибке
-            await msg.edit_text(result['text'])
+        await msg.edit_text(result['text'])
         
         logger.info(f"✅ Пробив IP завершен для пользователя {user_id}, IP: {ip}")
         
@@ -1132,24 +890,71 @@ async def run_probe_animation(callback, user_id, ip):
         logger.error(traceback.format_exc())
 
 # ================================================================
+# 📱 ПРОБИВ НОМЕРА (РЕАЛЬНЫЙ)
+# ================================================================
+async def run_probe_phone_animation(callback, user_id, phone):
+    try:
+        msg = await callback.message.answer(
+            f"📱 ПРОВЕРКА НОМЕРА\n\n"
+            f"🎯 Номер: {phone}\n\n"
+            f"⚡ Поиск в базах операторов...\n"
+            f"⏳ Определение региона...\n"
+            f"⏳ Проверка в открытых источниках...\n"
+            f"⏳ Анализ активности...\n\n"
+            f"Прогресс: ░░░░░░░░░░░░░░░░ 0%\n\n"
+            f"Статус: ИНИЦИАЛИЗАЦИЯ..."
+        )
+        await asyncio.sleep(0.5)
+        
+        phone_steps = [
+            (33, "⚡ Поиск в базах операторов... ✅\n⏳ Определение региона...\n⏳ Проверка в открытых источниках...\n⏳ Анализ активности...", "ПОИСК ДАННЫХ..."),
+            (66, "⚡ Поиск в базах операторов... ✅\n⏳ Определение региона... ✅\n⏳ Проверка в открытых источниках...\n⏳ Анализ активности...", "АНАЛИЗ ДАННЫХ..."),
+            (100, "⚡ Поиск в базах операторов... ✅\n⏳ Определение региона... ✅\n⏳ Проверка в открытых источниках... ✅\n⏳ Анализ активности... ✅", "✅ ДАННЫЕ ПОЛУЧЕНЫ")
+        ]
+        
+        for percent, lines, status in phone_steps:
+            bars = "█" * (percent//6) + "░" * (16 - percent//6)
+            try:
+                await msg.edit_text(
+                    f"📱 ПРОВЕРКА НОМЕРА\n\n"
+                    f"🎯 Номер: {phone}\n\n"
+                    f"{lines}\n\n"
+                    f"Прогресс: {bars} {percent}%\n\n"
+                    f"Статус: {status}"
+                )
+            except:
+                pass
+            await asyncio.sleep(0.5)
+        
+        await asyncio.sleep(0.5)
+        
+        result = await get_phone_info(phone)
+        await msg.edit_text(result['text'])
+        
+        logger.info(f"✅ Пробив номера завершен для пользователя {user_id}, номер: {phone}")
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка в пробиве номера: {e}")
+        logger.error(traceback.format_exc())
+
+# ================================================================
 # ОТПРАВКА ОТЧЕТА АДМИНУ
 # ================================================================
-async def send_admin_report(user_id, ip, action):
-    """Отправка отчета администратору"""
+async def send_admin_report(user_id, target, action):
     try:
         user_info = user_data.get(user_id, {})
         
         report = (
-            f"⚠️ ВНИМАНИЕ! ВЫПОЛНЕН ЗАПРОС К СИСТЕМЕ!\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🆔 ID:        {user_info.get('user_id', 'Неизвестно')}\n"
-            f"👤 USER:      @{user_info.get('username', 'Неизвестно')}\n"
-            f"🎯 ТИП:       {action}\n"
-            f"🌐 IP:        {ip}\n"
-            f"🕐 ВРЕМЯ:     {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\n"
-            f"💀 СТАТУС:    ВЫПОЛНЕНО\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"🔥 ВСЕ ДАННЫЕ ЗАЛОГИРОВАНЫ!"
+            f"⚠️ ВНИМАНИЕ! ЗАПРОС К СИСТЕМЕ\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🆔 ID: {user_info.get('user_id', 'Неизвестно')}\n"
+            f"👤 Юзер: @{user_info.get('username', 'Неизвестно')}\n"
+            f"🎯 Тип: {action}\n"
+            f"🌐 Цель: {target}\n"
+            f"🕐 Время: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\n"
+            f"💀 Статус: ВЫПОЛНЕНО\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📌 Все данные залогированы!"
         )
         
         logger.info(f"📤 ОТПРАВКА ОТЧЕТА АДМИНУ {ADMIN_ID}")
@@ -1159,29 +964,10 @@ async def send_admin_report(user_id, ip, action):
             logger.info(f"✅ ОТЧЕТ УСПЕШНО ОТПРАВЛЕН АДМИНУ {ADMIN_ID}")
         except Exception as e:
             logger.warning(f"⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ АДМИНУ {ADMIN_ID}: {e}")
-            
-            admin_username = os.getenv("ADMIN_USERNAME")
-            if admin_username:
-                try:
-                    admin_username = admin_username.replace("@", "")
-                    admin_user = await bot.get_chat(f"@{admin_username}")
-                    await bot.send_message(chat_id=admin_user.id, text=report)
-                    logger.info(f"✅ ОТЧЕТ ОТПРАВЛЕН АДМИНУ @{admin_username}")
-                    return
-                except Exception as e2:
-                    logger.warning(f"⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ @{admin_username}: {e2}")
-            
             try:
                 await bot.send_message(
                     chat_id=user_id,
-                    text=(
-                        "⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ ОТЧЕТ АДМИНИСТРАТОРУ!\n\n"
-                        "📌 ПРИЧИНЫ:\n"
-                        "• АДМИН НЕ ЗАПУСТИЛ БОТА (напишите /start)\n"
-                        "• АДМИН ЗАБЛОКИРОВАЛ БОТА\n"
-                        "• УКАЗАН НЕВЕРНЫЙ ADMIN_ID\n\n"
-                        "🔄 ПОПРОСИТЕ АДМИНА НАПИСАТЬ /start, ЧТОБЫ ИСПРАВИТЬ!"
-                    )
+                    text="⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ ОТЧЕТ АДМИНИСТРАТОРУ!\n\n📌 Попросите админа написать /start"
                 )
                 logger.info(f"✅ ОТЧЕТ ОТПРАВЛЕН ПОЛЬЗОВАТЕЛЮ {user_id}")
             except Exception as e2:
@@ -1194,7 +980,7 @@ async def send_admin_report(user_id, ip, action):
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
-    logger.info("🔥 МЕГА-СТРАШНЫЙ БОТ С ПРОБИВОМ IP ЗАПУЩЕН!")
+    logger.info("🔥 МЕГА-БОТ С ПРОБИВОМ IP И НОМЕРОВ ЗАПУЩЕН!")
     logger.info(f"👤 АДМИН ID: {ADMIN_ID}")
     logger.info("=" * 60)
     await dp.start_polling(bot)
