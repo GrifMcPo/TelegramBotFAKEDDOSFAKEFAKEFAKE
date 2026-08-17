@@ -183,16 +183,14 @@ async def get_phone_info(phone: str):
         
         formatted_number = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
         
-        first_names = ['АЛЕКСАНДР', 'СЕРГЕЙ', 'ДМИТРИЙ', 'АЛЕКСЕЙ', 'МИХАИЛ', 'ВЛАДИМИР', 'ЕКАТЕРИНА', 'АННА', 'МАРИЯ', 'ЕЛЕНА', 'ОЛЬГА', 'ТАТЬЯНА']
-        last_names = ['ИВАНОВ', 'СМИРНОВ', 'КУЗНЕЦОВ', 'ПОПОВ', 'ВАСИЛЬЕВ', 'ПЕТРОВ', 'СОКОЛОВ', 'МИХАЙЛОВ', 'ФЕДОРОВ', 'МОРОЗОВ']
-        middle_names = ['ИВАНОВИЧ', 'СЕРГЕЕВИЧ', 'АЛЕКСАНДРОВИЧ', 'ДМИТРИЕВИЧ', 'ВЛАДИМИРОВИЧ', 'АЛЕКСЕЕВИЧ', 'МИХАЙЛОВИЧ', 'ПЕТРОВИЧ']
-        
-        name = f"{random.choice(last_names)} {random.choice(first_names)} {random.choice(middle_names)}"
-        
         cities = ['Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург', 'Казань', 'Нижний Новгород', 'Челябинск', 'Самара', 'Омск', 'Ростов-на-Дону']
-        registration_city = random.choice(cities)
+        city = random.choice(cities)
         
         activity_statuses = ["АКТИВЕН", "АКТИВЕН", "АКТИВЕН", "НЕАКТИВЕН", "В РОМИНГЕ"]
+        
+        whatsapp = "Найден ✅" if random.random() > 0.2 else "Не найден ❌"
+        telegram = "Найден ✅" if random.random() > 0.15 else "Не найден ❌"
+        viber = "Найден ✅" if random.random() > 0.5 else "Не найден ❌"
         
         info_text = (
             f"📊 РЕЗУЛЬТАТ ПРОБИВА НОМЕРА\n\n"
@@ -201,11 +199,23 @@ async def get_phone_info(phone: str):
             f"📱 Номер: {formatted_number}\n"
             f"📡 Оператор: {operator}\n"
             f"🌍 Регион: {region}\n"
-            f"🏙️ Город регистрации: {registration_city}\n"
-            f"👤 Владелец: {name}\n"
+            f"🏙️ Город: {city}\n"
             f"📅 Дата регистрации: {random.randint(1, 28)}.{random.randint(1, 12)}.201{random.randint(5, 9)}\n"
             f"🔄 Статус: {random.choice(activity_statuses)}\n"
             f"⏰ Активность: {'Высокая (ежедневно)' if random.random() > 0.3 else 'Средняя (несколько раз в неделю)'}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🔍 ДЕТАЛЬНАЯ ИНФОРМАЦИЯ\n"
+            f"📊 Тип номера: Мобильный (GSM)\n"
+            f"📶 Уровень сигнала: Стабильный\n"
+            f"🔄 Смена оператора: {'Нет' if random.random() > 0.3 else 'Была'}\n"
+            f"📅 Последняя активность: Сегодня, {random.randint(8, 22):02d}:{random.randint(0, 59):02d}\n"
+            f"📍 Последнее местоположение: {city}, Россия\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📱 ПРИВЯЗКА К СЕРВИСАМ\n"
+            f"💬 WhatsApp: {whatsapp}\n"
+            f"💬 Telegram: {telegram}\n"
+            f"💬 Viber: {viber}\n"
+            f"📧 Почта: {'Найдена (зашифровано)' if random.random() > 0.4 else 'Не найдена'}\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"🛡️ ПРОВЕРКА БЕЗОПАСНОСТИ\n"
             f"🔍 В базах спама: {'НЕТ' if random.random() > 0.2 else 'ДА'}\n"
