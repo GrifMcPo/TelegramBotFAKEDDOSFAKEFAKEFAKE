@@ -105,27 +105,22 @@ async def handle_business_message(message: types.Message):
         connection_id = message.business_connection_id
 
         # ============================================================
-        # КОМАНДА .ping - ОТВЕЧАЕТ И РЕДАКТИРУЕТ СВОЁ СООБЩЕНИЕ
+        # КОМАНДА .ping - ПРОСТО ОТВЕЧАЕТ СРАЗУ
         # ============================================================
         if text.lower() == '.ping':
             logger.info("🎯 .ping")
             
-            # ОТВЕЧАЕМ
-            msg = await send_business_message(
+            await send_business_message(
                 chat_id=chat_id,
-                text="⏳ Обработка...",
+                text=f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}",
                 connection_id=connection_id
             )
-            
-            if msg:
-                await asyncio.sleep(0.3)
-                await msg.edit_text(f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}")
             
             logger.info("✅ Ответ отправлен")
             return
 
         # ============================================================
-        # КОМАНДА .whois
+        # КОМАНДА .whois - ПОКА ПРОСТО ЗАГЛУШКА
         # ============================================================
         if text.lower().startswith('.whois'):
             logger.info("🎯 .whois")
@@ -141,16 +136,14 @@ async def handle_business_message(message: types.Message):
                 await send_business_message(chat_id, f"❌ Некорректный IP: {ip}", connection_id)
                 return
             
-            # ОТВЕЧАЕМ С ЗАГРУЗКОЙ
-            loading = await send_business_message(
+            # ПОЛУЧАЕМ ДАННЫЕ И СРАЗУ ОТВЕЧАЕМ
+            result = await get_ip_info(ip)
+            
+            await send_business_message(
                 chat_id=chat_id,
-                text=f"🔍 Поиск информации об IP {ip}...",
+                text=result['text'] if result['success'] else f"❌ Ошибка: {result['text']}",
                 connection_id=connection_id
             )
-            
-            if loading:
-                result = await get_ip_info(ip)
-                await loading.edit_text(result['text'])
             
             logger.info(f"✅ IP {ip} проверен")
             return
@@ -208,15 +201,15 @@ async def start_command(message: types.Message):
         ".help - помощь\n"
         ".ping - проверка\n"
         "/chatid - ID чата\n\n"
-        "🔥 Бот отвечает в чат и редактирует свои сообщения!"
+        "🔥 Бот просто отвечает в чат!"
     )
 
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info("📌 Бот отвечает в бизнес-чат")
-    logger.info("📌 Твои сообщения НЕ УДАЛЯЮТСЯ")
+    logger.info("📌 Бот просто отвечает в бизнес-чат")
+    logger.info("📌 Без загрузок, без редактирования")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
