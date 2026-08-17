@@ -63,6 +63,21 @@ async def get_ip_info(ip: str):
     except Exception as e:
         return {'success': False, 'text': f"❌ Ошибка: {str(e)}"}
 
+# ========== ОТПРАВКА В БИЗНЕС-ЧАТ ==========
+async def send_business_message(chat_id: int, text: str, connection_id: str = None):
+    try:
+        if connection_id:
+            return await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                business_connection_id=connection_id
+            )
+        else:
+            return await bot.send_message(chat_id=chat_id, text=text)
+    except Exception as e:
+        logger.error(f"❌ Ошибка отправки: {e}")
+        return None
+
 # ========== ОБРАБОТЧИК ПОДКЛЮЧЕНИЯ ==========
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
@@ -80,7 +95,6 @@ async def handle_business_message(message: types.Message):
         logger.info("📩 НОВОЕ СООБЩЕНИЕ ИЗ БИЗНЕС-ЧАТА")
         logger.info(f"📌 ОТ: @{message.from_user.username or 'Нет'}")
         logger.info(f"📌 ТЕКСТ: {message.text}")
-        logger.info(f"📌 ID СООБЩЕНИЯ: {message.message_id}")
         logger.info("=" * 60)
 
         if not message.text:
@@ -88,94 +102,57 @@ async def handle_business_message(message: types.Message):
 
         text = message.text
         chat_id = message.chat.id
-        message_id = message.message_id
+        connection_id = message.business_connection_id
 
         # ============================================================
-        # КОМАНДА .ping - РЕДАКТИРУЕТ ТВОЁ СООБЩЕНИЕ
+        # КОМАНДА .ping - ОТВЕЧАЕТ И РЕДАКТИРУЕТ СВОЁ СООБЩЕНИЕ
         # ============================================================
         if text.lower() == '.ping':
-            logger.info("🎯 .ping - РЕДАКТИРУЮ ТВОЁ СООБЩЕНИЕ")
+            logger.info("🎯 .ping")
             
-            try:
-                # РЕДАКТИРУЕМ ТВОЁ СООБЩЕНИЕ!
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}"
-                )
-                logger.info("✅ Твоё сообщение отредактировано на Pong")
-            except Exception as e:
-                logger.error(f"❌ Ошибка редактирования: {e}")
-                # Если не получилось отредактировать — отвечаем
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}"
-                )
+            # ОТВЕЧАЕМ
+            msg = await send_business_message(
+                chat_id=chat_id,
+                text="⏳ Обработка...",
+                connection_id=connection_id
+            )
             
+            if msg:
+                await asyncio.sleep(0.3)
+                await msg.edit_text(f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}")
+            
+            logger.info("✅ Ответ отправлен")
             return
 
         # ============================================================
-        # КОМАНДА .whois - РЕДАКТИРУЕТ ТВОЁ СООБЩЕНИЕ
+        # КОМАНДА .whois
         # ============================================================
         if text.lower().startswith('.whois'):
-            logger.info("🎯 .whois - РЕДАКТИРУЮ ТВОЁ СООБЩЕНИЕ")
+            logger.info("🎯 .whois")
             
             ip = text.replace('.whois', '').strip()
             
             if not ip:
-                try:
-                    await bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=message_id,
-                        text="❌ ОШИБКА\n\nВведите IP-адрес\n📌 Пример: .whois 8.8.8.8"
-                    )
-                except:
-                    await bot.send_message(chat_id, "❌ Введите IP\nПример: .whois 8.8.8.8")
+                await send_business_message(chat_id, "❌ Введите IP\nПример: .whois 8.8.8.8", connection_id)
                 return
             
             ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
             if not re.match(ip_pattern, ip):
-                try:
-                    await bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=message_id,
-                        text=f"❌ НЕКОРРЕКТНЫЙ IP\n\nВведено: {ip}\n📌 Пример: 8.8.8.8"
-                    )
-                except:
-                    await bot.send_message(chat_id, f"❌ Некорректный IP: {ip}")
+                await send_business_message(chat_id, f"❌ Некорректный IP: {ip}", connection_id)
                 return
             
-            try:
-                # 1. РЕДАКТИРУЕМ ТВОЁ СООБЩЕНИЕ НА "ЗАГРУЗКУ"
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=f"🔍 ПОИСК ИНФОРМАЦИИ ОБ IP {ip}..."
-                )
-                
-                # 2. ПОЛУЧАЕМ ДАННЫЕ
-                result = await get_ip_info(ip)
-                
-                # 3. СНОВА РЕДАКТИРУЕМ ТВОЁ СООБЩЕНИЕ (ФИНАЛ)
-                if result['success']:
-                    final_text = result['text']
-                else:
-                    final_text = f"❌ ОШИБКА\n\n{result['text']}"
-                
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=final_text
-                )
-                
-                logger.info(f"✅ Твоё сообщение отредактировано на инфу об IP {ip}")
-                
-            except Exception as e:
-                logger.error(f"❌ Ошибка редактирования: {e}")
-                # Если не получилось — отвечаем новым сообщением
-                result = await get_ip_info(ip)
-                await bot.send_message(chat_id, result['text'] if result['success'] else f"❌ Ошибка: {result['text']}")
+            # ОТВЕЧАЕМ С ЗАГРУЗКОЙ
+            loading = await send_business_message(
+                chat_id=chat_id,
+                text=f"🔍 Поиск информации об IP {ip}...",
+                connection_id=connection_id
+            )
             
+            if loading:
+                result = await get_ip_info(ip)
+                await loading.edit_text(result['text'])
+            
+            logger.info(f"✅ IP {ip} проверен")
             return
 
         # ============================================================
@@ -183,30 +160,17 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         if text.lower() == '.help':
             logger.info("🎯 .help")
-            try:
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=(
-                        "🤖 ДОСТУПНЫЕ КОМАНДЫ\n\n"
-                        ".whois IP - информация об IP\n"
-                        ".help - помощь\n"
-                        ".ping - проверка\n"
-                        "/chatid - ID чата\n\n"
-                        "🔥 Бот РЕДАКТИРУЕТ твои сообщения!"
-                    )
-                )
-            except:
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=(
-                        "🤖 ДОСТУПНЫЕ КОМАНДЫ\n\n"
-                        ".whois IP - информация об IP\n"
-                        ".help - помощь\n"
-                        ".ping - проверка\n"
-                        "/chatid - ID чата"
-                    )
-                )
+            await send_business_message(
+                chat_id=chat_id,
+                text=(
+                    "🤖 ДОСТУПНЫЕ КОМАНДЫ\n\n"
+                    ".whois IP - информация об IP\n"
+                    ".help - помощь\n"
+                    ".ping - проверка\n"
+                    "/chatid - ID чата"
+                ),
+                connection_id=connection_id
+            )
             return
 
         # ============================================================
@@ -214,29 +178,17 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         if text.lower() == '/chatid':
             logger.info("🎯 /chatid")
-            try:
-                await bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=message_id,
-                    text=(
-                        f"📊 ИНФОРМАЦИЯ О ЧАТЕ\n\n"
-                        f"🆔 ID ЧАТА: {chat_id}\n"
-                        f"📌 ТИП: {message.chat.type}\n"
-                        f"👤 ТВОЙ ID: {message.from_user.id}\n"
-                        f"👤 ЮЗЕР: @{message.from_user.username or 'Нет'}"
-                    )
-                )
-            except:
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=(
-                        f"📊 ИНФОРМАЦИЯ О ЧАТЕ\n\n"
-                        f"🆔 ID ЧАТА: {chat_id}\n"
-                        f"📌 ТИП: {message.chat.type}\n"
-                        f"👤 ТВОЙ ID: {message.from_user.id}\n"
-                        f"👤 ЮЗЕР: @{message.from_user.username or 'Нет'}"
-                    )
-                )
+            await send_business_message(
+                chat_id=chat_id,
+                text=(
+                    f"📊 ИНФОРМАЦИЯ О ЧАТЕ\n\n"
+                    f"🆔 ID ЧАТА: {chat_id}\n"
+                    f"📌 ТИП: {message.chat.type}\n"
+                    f"👤 ТВОЙ ID: {message.from_user.id}\n"
+                    f"👤 ЮЗЕР: @{message.from_user.username or 'Нет'}"
+                ),
+                connection_id=connection_id
+            )
             return
 
         logger.info(f"⏭️ НЕ РАСПОЗНАНА: {text}")
@@ -251,21 +203,20 @@ async def handle_business_message(message: types.Message):
 async def start_command(message: types.Message):
     await message.answer(
         "🤖 БОТ ДЛЯ БИЗНЕС-ЧАТОВ\n\n"
-        "📌 КОМАНДЫ РЕДАКТИРУЮТ ТВОИ СООБЩЕНИЯ:\n\n"
+        "📌 КОМАНДЫ:\n"
         ".whois IP - информация об IP\n"
         ".help - помощь\n"
         ".ping - проверка\n"
         "/chatid - ID чата\n\n"
-        "🔥 Пример: .whois 8.8.8.8\n"
-        "Твоё сообщение ЗАМЕНИТСЯ на информацию об IP!"
+        "🔥 Бот отвечает в чат и редактирует свои сообщения!"
     )
 
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info("📌 Бот РЕДАКТИРУЕТ твои сообщения в бизнес-чате")
-    logger.info("📌 Ты пишешь .ping → сообщение становится Pong!")
+    logger.info("📌 Бот отвечает в бизнес-чат")
+    logger.info("📌 Твои сообщения НЕ УДАЛЯЮТСЯ")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
