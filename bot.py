@@ -33,16 +33,13 @@ if not BOT_TOKEN:
     sys.exit(1)
 
 logger.info("=" * 60)
-logger.info("🚀 ЗАПУСК БОТА ДЛЯ ЛИЧНЫХ ЧАТОВ")
+logger.info("🚀 ЗАПУСК БОТА ДЛЯ РЕДАКТИРОВАНИЯ СООБЩЕНИЙ")
 logger.info(f"🤖 Токен: {BOT_TOKEN[:15]}...")
 logger.info(f"👤 АДМИН ID: {ADMIN_ID}")
 logger.info("=" * 60)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-
-# ========== ХРАНИЛИЩЕ ДЛЯ ОТСЛЕЖИВАНИЯ ==========
-processed_messages = set()  # Чтобы не обрабатывать одно сообщение дважды
 
 # ========== ФУНКЦИЯ ДЛЯ ПРОБИВА IP ==========
 async def get_ip_info(ip: str):
@@ -58,6 +55,7 @@ async def get_ip_info(ip: str):
             data = response.json()
             if data.get('status') == 'success':
                 info_text = (
+                    f"✅ ИНФОРМАЦИЯ ОБ IP\n\n"
                     f"🌐 IP: {data['query']}\n"
                     f"🌍 Страна: {data['country']} {data.get('countryCode', '')}\n"
                     f"🏙️ Регион: {data['regionName']}\n"
@@ -83,25 +81,28 @@ async def get_ip_info(ip: str):
 async def handle_messages(message: types.Message):
     try:
         # ============================================================
-        # МОЩНОЕ ЛОГИРОВАНИЕ КАЖДОГО СООБЩЕНИЯ
+        # МОЩНОЕ ЛОГИРОВАНИЕ
         # ============================================================
         logger.info("=" * 60)
         logger.info("📩 НОВОЕ СООБЩЕНИЕ")
         logger.info(f"📌 ID СООБЩЕНИЯ: {message.message_id}")
         logger.info(f"📌 ТИП ЧАТА: {message.chat.type}")
         logger.info(f"📌 ID ЧАТА: {message.chat.id}")
-        logger.info(f"📌 НАЗВАНИЕ ЧАТА: {message.chat.full_name if hasattr(message.chat, 'full_name') else 'Нет'}")
         logger.info(f"📌 ID ПОЛЬЗОВАТЕЛЯ: {message.from_user.id}")
         logger.info(f"📌 ЮЗЕРНЕЙМ: @{message.from_user.username or 'Нет'}")
         logger.info(f"📌 ИМЯ: {message.from_user.full_name}")
         logger.info(f"📌 ТЕКСТ: {message.text}")
-        logger.info(f"📌 ЕСТЬ ЛИ ТЕКСТ: {bool(message.text)}")
-        logger.info(f"📌 ТИП КОНТЕНТА: {message.content_type}")
         logger.info("=" * 60)
         
         # ============================================================
-        # ИГНОРИРУЕМ СООБЩЕНИЯ БЕЗ ТЕКСТА
+        # ПРОВЕРКА: РАБОТАЕМ ТОЛЬКО В ЛИЧНЫХ ЧАТАХ
         # ============================================================
+        if message.chat.type != ChatType.PRIVATE:
+            logger.info(f"⏭️ ИГНОРИРУЕМ: чат типа {message.chat.type} (не PRIVATE)")
+            return
+        else:
+            logger.info("✅ РАБОТАЕМ: чат типа PRIVATE (личный чат)")
+        
         if not message.text:
             logger.info("⏭️ ИГНОРИРУЕМ: сообщение без текста")
             return
@@ -110,61 +111,10 @@ async def handle_messages(message: types.Message):
         user_id = message.from_user.id
         username = message.from_user.username or "Нет юзернейма"
         chat_id = message.chat.id
-        chat_type = message.chat.type
+        message_id = message.message_id
         
         # ============================================================
-        # КОМАНДА /chatid - ОТПРАВЛЯЕТ ID ЧАТА В ЛИЧКУ
-        # ============================================================
-        if text.lower() == '/chatid' or text.lower() == '!chatid':
-            logger.info(f"🎯 ОБНАРУЖЕНА КОМАНДА /chatid от @{username} в чате {chat_id}")
-            logger.info(f"📌 Тип чата: {chat_type}")
-            
-            # Формируем сообщение с информацией о чате
-            chat_info = (
-                f"📊 ИНФОРМАЦИЯ О ЧАТЕ\n\n"
-                f"🆔 ID ЧАТА: {chat_id}\n"
-                f"📌 ТИП ЧАТА: {chat_type}\n"
-                f"👤 ТВОЙ ID: {user_id}\n"
-                f"👤 ЮЗЕРНЕЙМ: @{username}\n"
-                f"👤 ИМЯ: {message.from_user.full_name}\n"
-                f"📌 СООБЩЕНИЕ ИЗ: {chat_type}\n"
-                f"🕐 ВРЕМЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\n\n"
-                f"✅ Бот видит этот чат!"
-            )
-            
-            # ============================================================
-            # ОТПРАВЛЯЕМ ID В ЛИЧКУ ПОЛЬЗОВАТЕЛЮ
-            # ============================================================
-            try:
-                # Отправляем в ЛС пользователя
-                await bot.send_message(
-                    chat_id=user_id,
-                    text=f"📩 Запрос /chatid из чата {chat_id}\n\n{chat_info}"
-                )
-                logger.info(f"✅ ID чата {chat_id} отправлен в ЛС пользователю @{username}")
-                
-                # Также отвечаем в чат (чтобы пользователь знал, что бот работает)
-                await message.reply(
-                    f"✅ Команда принята!\n"
-                    f"📩 ID чата отправлен тебе в ЛС\n"
-                    f"🆔 ID чата: {chat_id}"
-                )
-                logger.info(f"✅ Ответ отправлен в чат {chat_id}")
-                
-            except Exception as e:
-                logger.error(f"❌ Ошибка при отправке в ЛС: {e}")
-                # Если не отправилось в ЛС, отвечаем в чате
-                await message.reply(
-                    f"⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ В ЛС\n\n"
-                    f"🆔 ID ЧАТА: {chat_id}\n"
-                    f"📌 ТИП: {chat_type}\n\n"
-                    f"❌ Ошибка: {str(e)}"
-                )
-            
-            return
-        
-        # ============================================================
-        # КОМАНДА .whois
+        # КОМАНДА .whois - РЕДАКТИРУЕТ СООБЩЕНИЕ ПОЛЬЗОВАТЕЛЯ
         # ============================================================
         if text.lower().startswith('.whois'):
             logger.info(f"🎯 КОМАНДА .whois от @{username} в чате {chat_id}")
@@ -173,46 +123,124 @@ async def handle_messages(message: types.Message):
             logger.info(f"📌 IP после очистки: '{ip}'")
             
             if not ip:
-                await message.reply("❌ Введите IP-адрес\n📌 Пример: .whois 8.8.8.8")
+                # Если IP не указан, редактируем сообщение с ошибкой
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text="❌ ОШИБКА\n\nВведите IP-адрес\n📌 Пример: .whois 8.8.8.8"
+                )
+                logger.info("✅ Сообщение отредактировано: IP не указан")
                 return
             
+            # Валидация IP
             ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
             if not re.match(ip_pattern, ip):
-                await message.reply("❌ Некорректный IP-адрес\n📌 Пример: 8.8.8.8")
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=f"❌ НЕКОРРЕКТНЫЙ IP\n\nВведено: {ip}\n📌 Пример: 8.8.8.8"
+                )
+                logger.info(f"✅ Сообщение отредактировано: некорректный IP {ip}")
                 return
             
             logger.info(f"✅ IP валидный: {ip}")
-            loading_msg = await message.reply("🔍 Поиск информации об IP...")
             
+            # ============================================================
+            # РЕДАКТИРУЕМ СООБЩЕНИЕ ПОЛЬЗОВАТЕЛЯ
+            # ============================================================
+            # Сначала меняем на "загрузка"
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=f"🔍 ПОИСК ИНФОРМАЦИИ ОБ IP {ip}..."
+            )
+            logger.info(f"📝 Сообщение отредактировано: загрузка")
+            
+            # Получаем данные
             result = await get_ip_info(ip)
+            logger.info(f"📥 Получен результат от API: success={result['success']}")
             
+            # Финальное редактирование
             if result['success']:
-                await loading_msg.edit_text(f"✅ ИНФОРМАЦИЯ ОБ IP\n\n{result['text']}")
+                final_text = result['text']
+                logger.info("📤 Отправка успешного результата")
             else:
-                await loading_msg.edit_text(result['text'])
+                final_text = f"❌ ОШИБКА\n\n{result['text']}"
+                logger.warning("📤 Отправка сообщения об ошибке")
             
-            logger.info(f"✅ IP {ip} проверен для @{username}")
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=final_text
+            )
+            logger.info(f"✅ Сообщение отредактировано финальным результатом")
+            logger.info(f"📌 ИТОГ: IP {ip} проверен для @{username} в чате {chat_id}")
             return
         
         # ============================================================
         # КОМАНДА .help
         # ============================================================
         if text.lower() == '.help':
-            await message.reply(
+            logger.info(f"📖 ПОКАЗ HELP для @{username}")
+            help_text = (
                 "🤖 ДОСТУПНЫЕ КОМАНДЫ\n\n"
-                "/chatid - показать ID чата (отправит в ЛС)\n"
-                ".whois IP - информация об IP\n"
+                ".whois IP - информация об IP (редактирует сообщение)\n"
                 ".help - помощь\n"
-                ".ping - проверка бота\n\n"
-                "📌 Пример: .whois 8.8.8.8"
+                ".ping - проверка\n\n"
+                "📌 Пример: .whois 8.8.8.8\n\n"
+                "🔥 Команда РЕДАКТИРУЕТ твое сообщение!"
             )
+            await message.reply(help_text)
             return
         
         # ============================================================
         # КОМАНДА .ping
         # ============================================================
         if text.lower() == '.ping':
+            logger.info(f"🏓 PING от @{username}")
             await message.reply(f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}")
+            return
+        
+        # ============================================================
+        # КОМАНДА /chatid
+        # ============================================================
+        if text.lower() == '/chatid':
+            logger.info(f"🎯 КОМАНДА /chatid от @{username} в чате {chat_id}")
+            
+            chat_info = (
+                f"📊 ИНФОРМАЦИЯ О ЧАТЕ\n\n"
+                f"🆔 ID ЧАТА: {chat_id}\n"
+                f"📌 ТИП ЧАТА: {message.chat.type}\n"
+                f"👤 ТВОЙ ID: {user_id}\n"
+                f"👤 ЮЗЕРНЕЙМ: @{username}\n"
+                f"🕐 ВРЕМЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\n\n"
+                f"✅ Бот видит этот чат!"
+            )
+            
+            try:
+                # Отправляем в ЛС пользователя
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=f"📩 Запрос /chatid из чата {chat_id}\n\n{chat_info}"
+                )
+                logger.info(f"✅ ID чата {chat_id} отправлен в ЛС пользователю @{username}")
+                
+                # Редактируем сообщение в чате
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=f"✅ ID чата отправлен тебе в ЛС\n🆔 ID: {chat_id}"
+                )
+                logger.info(f"✅ Сообщение отредактировано")
+                
+            except Exception as e:
+                logger.error(f"❌ Ошибка при отправке в ЛС: {e}")
+                await bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=f"⚠️ НЕ УДАЛОСЬ ОТПРАВИТЬ В ЛС\n\n🆔 ID ЧАТА: {chat_id}\n❌ Ошибка: {str(e)}"
+                )
+            
             return
         
         # ============================================================
@@ -235,15 +263,15 @@ async def start_command(message: types.Message):
         user_id = message.from_user.id
         username = message.from_user.username or "Нет юзернейма"
         
-        logger.info(f"👤 Пользователь @{username} (ID: {user_id}) запустил бота (команда /start)")
+        logger.info(f"👤 Пользователь @{username} (ID: {user_id}) запустил бота")
         
         await message.answer(
             "🤖 БОТ АКТИВЕН\n\n"
-            "📌 КОМАНДЫ:\n\n"
-            "/chatid - показать ID чата (отправит в ЛС)\n"
-            ".whois IP - информация об IP\n"
+            "📌 КОМАНДЫ РЕДАКТИРУЮТ ТВОИ СООБЩЕНИЯ!\n\n"
+            ".whois IP - информация об IP (редактирует сообщение)\n"
             ".help - помощь\n"
-            ".ping - проверка бота\n\n"
+            ".ping - проверка\n"
+            "/chatid - ID чата в ЛС\n\n"
             "💡 Пример: .whois 8.8.8.8"
         )
         logger.info(f"✅ Ответ на /start отправлен пользователю @{username}")
@@ -271,8 +299,8 @@ async def status_command(message: types.Message):
             f"👤 Админ: {ADMIN_ID}\n"
             f"🤖 Бот: @{bot_info.username}\n"
             f"🆔 ID бота: {bot_info.id}\n"
-            f"📌 Режим: Все чаты\n"
-            f"📌 Команды: /chatid, .whois, .help, .ping"
+            f"📌 Режим: Редактирование сообщений\n"
+            f"📌 Команды: .whois (редактирует), .help, .ping, /chatid"
         )
         await message.reply(stats)
         logger.info(f"✅ Статистика отправлена админу")
@@ -283,15 +311,10 @@ async def status_command(message: types.Message):
 async def main():
     try:
         logger.info("=" * 60)
-        logger.info("🔥 БОТ ДЛЯ ЛИЧНЫХ ЧАТОВ ЗАПУЩЕН!")
-        logger.info("🤖 Бот работает ВО ВСЕХ чатах")
-        logger.info("📌 КОМАНДА /chatid - отправляет ID чата в ЛС")
+        logger.info("🔥 БОТ ДЛЯ РЕДАКТИРОВАНИЯ СООБЩЕНИЙ ЗАПУЩЕН!")
+        logger.info("🤖 Бот РЕДАКТИРУЕТ твои сообщения в чатах!")
+        logger.info("📌 КОМАНДА .whois - заменяет сообщение на информацию об IP")
         logger.info(f"👤 АДМИН ID: {ADMIN_ID}")
-        logger.info("📌 ДОСТУПНЫЕ КОМАНДЫ:")
-        logger.info("   /chatid - ID чата в ЛС")
-        logger.info("   .whois IP - информация об IP")
-        logger.info("   .help - помощь")
-        logger.info("   .ping - проверка")
         logger.info("=" * 60)
         await dp.start_polling(bot)
     except Exception as e:
