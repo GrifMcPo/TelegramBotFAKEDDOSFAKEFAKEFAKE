@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types.business_connection import BusinessConnection
-from aiogram.types.business_messages_deleted import BusinessMessagesDeleted
 
 logging.basicConfig(
     level=logging.INFO,
@@ -103,13 +102,13 @@ async def handle_business_message(message: types.Message):
         message_id = message.message_id
 
         # ============================================================
-        # КОМАНДА .whois - УДАЛЯЕТ КОМАНДУ И ОТВЕЧАЕТ
+        # КОМАНДА .whois
         # ============================================================
         if text.lower().startswith('.whois'):
+            logger.info("🎯 .whois")
             ip = text.replace('.whois', '').strip()
             
             if not ip:
-                # Удаляем команду и отправляем ошибку
                 await safe_delete(chat_id, message_id)
                 await message.answer("❌ Введите IP\nПример: .whois 8.8.8.8")
                 return
@@ -130,30 +129,34 @@ async def handle_business_message(message: types.Message):
             return
 
         # ============================================================
-        # КОМАНДА .help - УДАЛЯЕТ КОМАНДУ И ОТВЕЧАЕТ
+        # КОМАНДА .help
         # ============================================================
         if text.lower() == '.help':
+            logger.info("🎯 .help")
             await safe_delete(chat_id, message_id)
             await message.answer(
                 "🤖 КОМАНДЫ\n\n"
                 ".whois IP - информация об IP\n"
                 ".help - помощь\n"
-                ".ping - проверка"
+                ".ping - проверка\n"
+                "/chatid - ID чата"
             )
             return
 
         # ============================================================
-        # КОМАНДА .ping - УДАЛЯЕТ КОМАНДУ И ОТВЕЧАЕТ
+        # КОМАНДА .ping
         # ============================================================
         if text.lower() == '.ping':
+            logger.info("🎯 .ping")
             await safe_delete(chat_id, message_id)
             await message.answer(f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}")
             return
 
         # ============================================================
-        # КОМАНДА /chatid - УДАЛЯЕТ КОМАНДУ И ОТВЕЧАЕТ
+        # КОМАНДА /chatid
         # ============================================================
         if text.lower() == '/chatid':
+            logger.info("🎯 /chatid")
             await safe_delete(chat_id, message_id)
             await message.answer(
                 f"📊 ИНФОРМАЦИЯ О ЧАТЕ\n\n"
@@ -164,17 +167,15 @@ async def handle_business_message(message: types.Message):
             )
             return
 
+        # ============================================================
+        # ЕСЛИ КОМАНДА НЕ РАСПОЗНАНА - НИЧЕГО НЕ ДЕЛАЕМ
+        # ============================================================
+        logger.info(f"⏭️ НЕ РАСПОЗНАНА: {text}")
+
     except Exception as e:
         logger.error(f"❌ ОШИБКА: {e}")
         import traceback
         logger.error(traceback.format_exc())
-
-# ========== ОБРАБОТЧИК УДАЛЕНИЯ СООБЩЕНИЙ ==========
-@dp.business_messages_deleted()
-async def handle_business_messages_deleted(event: BusinessMessagesDeleted):
-    logger.info(f"🗑️ УДАЛЕНЫ СООБЩЕНИЯ В БИЗНЕС-ЧАТЕ")
-    logger.info(f"📌 ID чата: {event.chat_id}")
-    logger.info(f"📌 ID сообщений: {event.message_ids}")
 
 # ========== КОМАНДА /START ==========
 @dp.message(Command("start"))
@@ -184,7 +185,8 @@ async def start_command(message: types.Message):
         "📌 КОМАНДЫ:\n"
         ".whois IP - информация об IP\n"
         ".help - помощь\n"
-        ".ping - проверка\n\n"
+        ".ping - проверка\n"
+        "/chatid - ID чата\n\n"
         "🔥 Бот удаляет твои команды и отвечает чисто!\n"
         "📌 Пример: .whois 8.8.8.8"
     )
