@@ -166,17 +166,18 @@ async def delete_business_message(chat_id: int, message_id: int, connection_id: 
         logger.warning(f"⚠️ Не удалось удалить через Business API: {e}")
         return False
 
-# ========== ГЛАВНАЯ ФУНКЦИЯ ОТПРАВКИ ==========
-async def send_to_chat(chat_id: int, text: str, reply_markup=None):
-    """Отправляет сообщение в указанный чат от имени бота"""
+# ========== ОТПРАВКА В ОБЩИЙ ЧАТ (С BUSINESS_CONNECTION_ID) ==========
+async def send_to_chat(chat_id: int, text: str, connection_id: str, reply_markup=None):
+    """Отправляет сообщение В ОБЩИЙ ЧАТ от имени владельца бизнес-аккаунта"""
     try:
         return await bot.send_message(
             chat_id=chat_id,
             text=text,
+            business_connection_id=connection_id,
             reply_markup=reply_markup
         )
     except Exception as e:
-        logger.error(f"❌ Ошибка отправки в чат {chat_id}: {e}")
+        logger.error(f"❌ Ошибка отправки: {e}")
         return None
 
 # ========== ОБРАБОТЧИК ПОДКЛЮЧЕНИЯ ==========
@@ -200,13 +201,13 @@ async def handle_business_connection(connection: BusinessConnection):
         }
         save_users(users_data)
         
-        await send_to_chat(
-            user_id,
-            f"✅ БОТ АКТИВЕН!\n\n"
-            f"👤 Вы подключены к боту!\n"
-            f"🆔 Ваш ID: {user_id}\n"
-            f"📌 Команды работают для вас!\n\n"
-            f"🔥 Введите .inf для справки."
+        await bot.send_message(
+            chat_id=user_id,
+            text=f"✅ БОТ АКТИВЕН!\n\n"
+                 f"👤 Вы подключены к боту!\n"
+                 f"🆔 Ваш ID: {user_id}\n"
+                 f"📌 Команды работают для вас!\n\n"
+                 f"🔥 Введите .inf для справки."
         )
     else:
         logger.warning("⚠️ Не удалось определить пользователя!")
@@ -227,19 +228,22 @@ async def handle_callback(callback: types.CallbackQuery):
             
             await send_to_chat(
                 chat_id=chat_id,
-                text="🔥 Начинаю троллинг спам...\n\n💬 Отправляю 10 оскорблений!"
+                text="🔥 Начинаю троллинг спам...\n\n💬 Отправляю 10 оскорблений!",
+                connection_id=connection_id
             )
             
             for i, insult in enumerate(INSULTS, 1):
                 await send_to_chat(
                     chat_id=chat_id,
-                    text=f"{i}. {insult}"
+                    text=f"{i}. {insult}",
+                    connection_id=connection_id
                 )
                 await asyncio.sleep(0.5)
             
             await send_to_chat(
                 chat_id=chat_id,
-                text="✅ Спам завершен! Все 10 оскорблений отправлены."
+                text="✅ Спам завершен! Все 10 оскорблений отправлены.",
+                connection_id=connection_id
             )
             
             await callback.answer()
@@ -305,7 +309,8 @@ async def handle_business_message(message: types.Message):
                     "⚡ ДРУГОЕ\n\n"
                     "> .ping - Проверка работы бота\n"
                     "> .inf - Эта справка"
-                )
+                ),
+                connection_id=connection_id
             )
             return
 
@@ -322,7 +327,8 @@ async def handle_business_message(message: types.Message):
                     chat_id,
                     "❌ Неправильный формат\n\n"
                     "📌 .spam [Кол-во] [Текст]\n\n"
-                    "Пример: .spam 5 Привет всем!"
+                    "Пример: .spam 5 Привет всем!",
+                    connection_id
                 )
                 return
             
@@ -333,35 +339,39 @@ async def handle_business_message(message: types.Message):
                 await send_to_chat(
                     chat_id,
                     "❌ Количество должно быть числом!\n\n"
-                    "Пример: .spam 5 Привет всем!"
+                    "Пример: .spam 5 Привет всем!",
+                    connection_id
                 )
                 return
             
             if count < 1:
-                await send_to_chat(chat_id, "❌ Количество должно быть больше 0!")
+                await send_to_chat(chat_id, "❌ Количество должно быть больше 0!", connection_id)
                 return
             
             if count > 100:
-                await send_to_chat(chat_id, "❌ Максимум 100 сообщений за раз!")
+                await send_to_chat(chat_id, "❌ Максимум 100 сообщений за раз!", connection_id)
                 return
             
             await delete_business_message(chat_id, message_id, connection_id)
             
             await send_to_chat(
                 chat_id=chat_id,
-                text=f"🔥 Начинаю спам!\n📊 {count} сообщений\n📝 Текст: {spam_text}"
+                text=f"🔥 Начинаю спам!\n📊 {count} сообщений\n📝 Текст: {spam_text}",
+                connection_id=connection_id
             )
             
             for i in range(1, count + 1):
                 await send_to_chat(
                     chat_id=chat_id,
-                    text=f"{i}. {spam_text}"
+                    text=f"{i}. {spam_text}",
+                    connection_id=connection_id
                 )
                 await asyncio.sleep(0.3)
             
             await send_to_chat(
                 chat_id=chat_id,
-                text=f"✅ Спам завершен! Отправлено {count} сообщений."
+                text=f"✅ Спам завершен! Отправлено {count} сообщений.",
+                connection_id=connection_id
             )
             
             logger.info(f"✅ Спам {count} раз отправлен")
@@ -376,6 +386,7 @@ async def handle_business_message(message: types.Message):
             await send_to_chat(
                 chat_id=chat_id,
                 text="🔥 Спам-меню открыто!\n\nВыберите какой спам вам нужен:",
+                connection_id=connection_id,
                 reply_markup=get_spam_keyboard()
             )
             return
@@ -395,7 +406,8 @@ async def handle_business_message(message: types.Message):
                     "📌 .whois number [НОМЕР] - пробив по номеру\n\n"
                     "Примеры:\n"
                     ".whois ip 8.8.8.8\n"
-                    ".whois number 89001234567"
+                    ".whois number 89001234567",
+                    connection_id
                 )
                 return
             
@@ -405,19 +417,19 @@ async def handle_business_message(message: types.Message):
             if command_type == 'ip':
                 ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
                 if not re.match(ip_pattern, target):
-                    await send_to_chat(chat_id, f"❌ Некорректный IP: {target}\n📌 Пример: 8.8.8.8")
+                    await send_to_chat(chat_id, f"❌ Некорректный IP: {target}\n📌 Пример: 8.8.8.8", connection_id)
                     return
                 
                 await delete_business_message(chat_id, message_id, connection_id)
                 result = await get_ip_info(target)
-                await send_to_chat(chat_id, result['text'] if result['success'] else f"❌ Ошибка: {result['text']}")
+                await send_to_chat(chat_id, result['text'] if result['success'] else f"❌ Ошибка: {result['text']}", connection_id)
                 logger.info(f"✅ IP {target} проверен")
                 return
             
             elif command_type == 'number':
                 await delete_business_message(chat_id, message_id, connection_id)
                 result = await get_phone_info(target)
-                await send_to_chat(chat_id, result['text'] if result['success'] else f"❌ Ошибка: {result['text']}")
+                await send_to_chat(chat_id, result['text'] if result['success'] else f"❌ Ошибка: {result['text']}", connection_id)
                 logger.info(f"✅ Номер {target} проверен")
                 return
             
@@ -427,7 +439,8 @@ async def handle_business_message(message: types.Message):
                     "❌ Неизвестный тип\n\n"
                     "📌 Доступные типы:\n"
                     ".whois ip [IP] - пробив по IP\n"
-                    ".whois number [НОМЕР] - пробив по номеру"
+                    ".whois number [НОМЕР] - пробив по номеру",
+                    connection_id
                 )
             return
 
@@ -439,7 +452,8 @@ async def handle_business_message(message: types.Message):
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_chat(
                 chat_id=chat_id,
-                text=f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}"
+                text=f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}",
+                connection_id=connection_id
             )
             logger.info("✅ Ответ отправлен")
             return
@@ -458,7 +472,8 @@ async def handle_business_message(message: types.Message):
                     f"📌 ТИП: {message.chat.type}\n"
                     f"👤 ТВОЙ ID: {message.from_user.id}\n"
                     f"👤 ЮЗЕР: @{message.from_user.username or 'Нет'}"
-                )
+                ),
+                connection_id=connection_id
             )
             return
 
@@ -488,7 +503,7 @@ async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
     logger.info(f"📌 Загружено пользователей: {len(users_data)}")
-    logger.info("📌 Бот отвечает В ТОТ ЖЕ ЧАТ от имени бота!")
+    logger.info("📌 Бот отправляет сообщения В ОБЩИЙ ЧАТ (business_connection_id)")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
