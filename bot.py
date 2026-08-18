@@ -35,10 +35,10 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ========== ХРАНИЛИЩЕ ДЛЯ МУТА ==========
-muted_chats = {}  # {chat_id: True} — чаты в муте
+# ========== ХРАНИЛИЩЕ ==========
+muted_chats = {}
 
-# ========== ТВОИ ОСКОРБЛЕНИЯ ==========
+# ========== ОСКОРБЛЕНИЯ ==========
 INSULTS = [
     "хахах что ты пидорасина в себя поверил?",
     "Сколько твоя мамка в час берет? или бесплатно ха-ха",
@@ -52,7 +52,7 @@ INSULTS = [
     "Ты такой никчемный, что даже интернет тебя не хочет!"
 ]
 
-# ========== КЛАВИАТУРА ДЛЯ СПАМ-МЕНЮ ==========
+# ========== КЛАВИАТУРА ==========
 def get_spam_keyboard():
     buttons = [
         [InlineKeyboardButton(text="🔥 Троллинг спам", callback_data="spam_troll")],
@@ -129,6 +129,20 @@ async def get_phone_info(phone: str):
     except Exception as e:
         return {'success': False, 'text': f"❌ Ошибка: {str(e)}"}
 
+# ========== УДАЛЕНИЕ ЧЕРЕЗ BUSINESS API ==========
+async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
+    """Удаляет сообщение через Business API"""
+    try:
+        await bot.delete_business_messages(
+            business_connection_id=connection_id,
+            message_ids=[message_id]
+        )
+        logger.info(f"🗑️ Сообщение {message_id} удалено через Business API")
+        return True
+    except Exception as e:
+        logger.warning(f"⚠️ Не удалось удалить через Business API: {e}")
+        return False
+
 # ========== ОТПРАВКА В БИЗНЕС-ЧАТ ==========
 async def send_business_message(chat_id: int, text: str, connection_id: str = None, reply_markup=None):
     try:
@@ -149,16 +163,6 @@ async def send_business_message(chat_id: int, text: str, connection_id: str = No
         logger.error(f"❌ Ошибка отправки: {e}")
         return None
 
-# ========== БЕЗОПАСНОЕ УДАЛЕНИЕ ==========
-async def safe_delete(chat_id: int, message_id: int):
-    try:
-        await bot.delete_message(chat_id=chat_id, message_id=message_id)
-        logger.info(f"🗑️ Сообщение удалено")
-        return True
-    except Exception as e:
-        logger.debug(f"⚠️ Не удалось удалить: {e}")
-        return False
-
 # ========== ОБРАБОТЧИК ПОДКЛЮЧЕНИЯ ==========
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
@@ -166,6 +170,7 @@ async def handle_business_connection(connection: BusinessConnection):
     logger.info("🔗 ПОДКЛЮЧЕНИЕ К БИЗНЕС-АККАУНТУ!")
     logger.info(f"📌 ID подключения: {connection.id}")
     logger.info(f"📌 Пользователь: @{connection.user.username if connection.user else 'Нет'}")
+    logger.info(f"📌 Может удалять сообщения: {connection.can_delete_all_messages}")
     logger.info("=" * 60)
 
 # ========== ОБРАБОТЧИК НАЖАТИЯ КНОПОК ==========
@@ -175,27 +180,31 @@ async def handle_callback(callback: types.CallbackQuery):
         data = callback.data
         chat_id = callback.message.chat.id
         message_id = callback.message.message_id
+        connection_id = callback.business_connection_id
         
         logger.info(f"🎯 Нажата кнопка: {data} от @{callback.from_user.username}")
         
         if data == "spam_troll":
-            await safe_delete(chat_id, message_id)
+            await delete_business_message(chat_id, message_id, connection_id)
             
             await bot.send_message(
                 chat_id=chat_id,
-                text="🔥 Начинаю троллинг спам...\n\n💬 Отправляю 10 оскорблений!"
+                text="🔥 Начинаю троллинг спам...\n\n💬 Отправляю 10 оскорблений!",
+                business_connection_id=connection_id
             )
             
             for i, insult in enumerate(INSULTS, 1):
                 await bot.send_message(
                     chat_id=chat_id,
-                    text=f"{i}. {insult}"
+                    text=f"{i}. {insult}",
+                    business_connection_id=connection_id
                 )
                 await asyncio.sleep(0.5)
             
             await bot.send_message(
                 chat_id=chat_id,
-                text="✅ Спам завершен! Все 10 оскорблений отправлены."
+                text="✅ Спам завершен! Все 10 оскорблений отправлены.",
+                business_connection_id=connection_id
             )
             
             await callback.answer()
@@ -218,7 +227,7 @@ async def handle_business_message(message: types.Message):
         logger.info("📩 НОВОЕ СООБЩЕНИЕ ИЗ БИЗНЕС-ЧАТА")
         logger.info(f"📌 ОТ: @{message.from_user.username or 'Нет'}")
         logger.info(f"📌 ТЕКСТ: {message.text}")
-        logger.info(f"📌 ID ЧАТА: {message.chat.id}")
+        logger.info(f"📌 ID СООБЩЕНИЯ: {message.message_id}")
         logger.info("=" * 60)
 
         if not message.text:
@@ -235,6 +244,9 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         if text.lower() == '.inf':
             logger.info("🎯 .inf")
+            
+            # УДАЛЯЕМ КОМАНДУ
+            await delete_business_message(chat_id, message_id, connection_id)
             
             await send_business_message(
                 chat_id=chat_id,
@@ -269,6 +281,9 @@ async def handle_business_message(message: types.Message):
         if text.lower() == '.mute':
             logger.info("🎯 .mute")
             
+            # УДАЛЯЕМ КОМАНДУ
+            await delete_business_message(chat_id, message_id, connection_id)
+            
             muted_chats[chat_id] = True
             
             await send_business_message(
@@ -290,6 +305,9 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         if text.lower() == '.unmute':
             logger.info("🎯 .unmute")
+            
+            # УДАЛЯЕМ КОМАНДУ
+            await delete_business_message(chat_id, message_id, connection_id)
             
             if chat_id in muted_chats:
                 del muted_chats[chat_id]
@@ -345,6 +363,9 @@ async def handle_business_message(message: types.Message):
                 await send_business_message(chat_id, "❌ Максимум 100 сообщений за раз!", connection_id)
                 return
             
+            # УДАЛЯЕМ КОМАНДУ
+            await delete_business_message(chat_id, message_id, connection_id)
+            
             await send_business_message(
                 chat_id=chat_id,
                 text=f"🔥 Начинаю спам!\n📊 {count} сообщений\n📝 Текст: {spam_text}",
@@ -373,6 +394,9 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         if text.lower() == '.spams':
             logger.info("🎯 .spams")
+            
+            # УДАЛЯЕМ КОМАНДУ
+            await delete_business_message(chat_id, message_id, connection_id)
             
             await send_business_message(
                 chat_id=chat_id,
@@ -414,12 +438,18 @@ async def handle_business_message(message: types.Message):
                     await send_business_message(chat_id, f"❌ Некорректный IP: {target}\n📌 Пример: 8.8.8.8", connection_id)
                     return
                 
+                # УДАЛЯЕМ КОМАНДУ
+                await delete_business_message(chat_id, message_id, connection_id)
+                
                 result = await get_ip_info(target)
                 await send_business_message(chat_id, result['text'] if result['success'] else f"❌ Ошибка: {result['text']}", connection_id)
                 logger.info(f"✅ IP {target} проверен")
                 return
             
             elif command_type == 'number':
+                # УДАЛЯЕМ КОМАНДУ
+                await delete_business_message(chat_id, message_id, connection_id)
+                
                 result = await get_phone_info(target)
                 await send_business_message(chat_id, result['text'] if result['success'] else f"❌ Ошибка: {result['text']}", connection_id)
                 logger.info(f"✅ Номер {target} проверен")
@@ -442,6 +472,9 @@ async def handle_business_message(message: types.Message):
         if text.lower() == '.ping':
             logger.info("🎯 .ping")
             
+            # УДАЛЯЕМ КОМАНДУ
+            await delete_business_message(chat_id, message_id, connection_id)
+            
             await send_business_message(
                 chat_id=chat_id,
                 text=f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}",
@@ -456,6 +489,10 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         if text.lower() == '/chatid':
             logger.info("🎯 /chatid")
+            
+            # УДАЛЯЕМ КОМАНДУ
+            await delete_business_message(chat_id, message_id, connection_id)
+            
             await send_business_message(
                 chat_id=chat_id,
                 text=(
@@ -472,22 +509,20 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         # ЕСЛИ ВКЛЮЧЕН МУТ — УДАЛЯЕМ ВСЕ СООБЩЕНИЯ СОБЕСЕДНИКА
         # ============================================================
-        # Проверяем: если чат в муте И сообщение НЕ от команды (.mute, .unmute и т.д.)
         if chat_id in muted_chats:
             # Не удаляем сообщения от самого бота
             if message.from_user.id == (await bot.get_me()).id:
                 return
             
-            # Проверяем, что это не команда от пользователя (чтобы не удалять .unmute)
+            # Проверяем, что это не команда от пользователя
             if text.startswith('.'):
                 return
             
-            # Удаляем сообщение собеседника
-            await safe_delete(chat_id, message_id)
+            # Удаляем сообщение собеседника через Business API
+            await delete_business_message(chat_id, message_id, connection_id)
             logger.info(f"🗑️ Удалено сообщение собеседника в замученном чате {chat_id}")
             return
 
-        # Если команда не распознана
         logger.info(f"⏭️ НЕ РАСПОЗНАНА: {text}")
 
     except Exception as e:
@@ -509,14 +544,16 @@ async def start_command(message: types.Message):
         ".spam [Кол-во] [Текст] - спам\n"
         ".spams - спам-меню\n"
         ".ping - проверка\n"
-        ".inf - справка"
+        ".inf - справка\n\n"
+        "🔥 Бот УДАЛЯЕТ команды через Business API!"
     )
 
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info("📌 Команды: .inf, .whois, .mute, .unmute, .spam, .spams, .ping")
+    logger.info("📌 Бот использует deleteBusinessMessages")
+    logger.info("📌 Команды УДАЛЯЮТСЯ!")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
