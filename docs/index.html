@@ -9,7 +9,7 @@
 <body>
 
     <!-- ============================================================ -->
-    <!-- СТРАНИЦА ВХОДА (ПО УМОЛЧАНИЮ ВИДНА) -->
+    <!-- СТРАНИЦА ВХОДА -->
     <!-- ============================================================ -->
     <div id="loginPage" class="login-page">
         <div class="login-container">
@@ -34,16 +34,14 @@
             </div>
         </div>
         
-        <!-- RGB Анимация фона -->
         <div class="rgb-bg"></div>
     </div>
 
     <!-- ============================================================ -->
-    <!-- ГЛАВНАЯ СТРАНИЦА (СКРЫТА ПО УМОЛЧАНИЮ) -->
+    <!-- ГЛАВНАЯ СТРАНИЦА -->
     <!-- ============================================================ -->
     <div id="mainPage" class="main-page" style="display: none;">
         
-        <!-- ШАПКА -->
         <header>
             <div class="header-container">
                 <div class="header-logo">
@@ -52,19 +50,19 @@
                 </div>
                 <div class="header-user">
                     <span>👤 Администратор</span>
+                    <span id="headerTime" style="font-size:12px;color:rgba(255,255,255,0.3);"></span>
                     <button id="logoutBtn" class="logout-btn">🚪 Выйти</button>
                 </div>
             </div>
         </header>
 
-        <!-- СТАТИСТИКА -->
         <section class="dashboard">
             <div class="container">
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-icon">👤</div>
                         <div class="stat-number" id="statUsers">0</div>
-                        <div class="stat-label">Пользователей</div>
+                        <div class="stat-label">Подключено пользователей</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-icon">📝</div>
@@ -72,20 +70,19 @@
                         <div class="stat-label">Выполнено команд</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-icon">⏱️</div>
+                        <div class="stat-icon">🕐</div>
                         <div class="stat-number" id="statUptime">0</div>
-                        <div class="stat-label">Время работы</div>
+                        <div class="stat-label">Последнее обновление</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-icon">📡</div>
-                        <div class="stat-number" id="statStatus">✅</div>
+                        <div class="stat-number" id="statStatus">🔴</div>
                         <div class="stat-label">Статус бота</div>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- КОМАНДЫ -->
         <section class="commands-section">
             <div class="container">
                 <h2>📋 ДОСТУПНЫЕ КОМАНДЫ</h2>
@@ -100,75 +97,4 @@
                     <div class="command-card">
                         <span class="cmd-icon">🌐</span>
                         <div class="cmd-info">
-                            <div class="cmd-name">.whois ip [IP]</div>
-                            <div class="cmd-desc">Пробив по IP-адресу</div>
-                        </div>
-                    </div>
-                    <div class="command-card">
-                        <span class="cmd-icon">📱</span>
-                        <div class="cmd-info">
-                            <div class="cmd-name">.whois number [НОМЕР]</div>
-                            <div class="cmd-desc">Пробив по номеру телефона</div>
-                        </div>
-                    </div>
-                    <div class="command-card">
-                        <span class="cmd-icon">🔥</span>
-                        <div class="cmd-info">
-                            <div class="cmd-name">.spam [N] [ТЕКСТ]</div>
-                            <div class="cmd-desc">Спам текстом N раз</div>
-                        </div>
-                    </div>
-                    <div class="command-card">
-                        <span class="cmd-icon">🎯</span>
-                        <div class="cmd-info">
-                            <div class="cmd-name">.spams</div>
-                            <div class="cmd-desc">Спам-меню с кнопками</div>
-                        </div>
-                    </div>
-                    <div class="command-card">
-                        <span class="cmd-icon">🏓</span>
-                        <div class="cmd-info">
-                            <div class="cmd-name">.ping</div>
-                            <div class="cmd-desc">Проверка работы бота</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- ПОЛЬЗОВАТЕЛИ -->
-        <section class="users-section">
-            <div class="container">
-                <h2>👤 АКТИВНЫЕ ПОЛЬЗОВАТЕЛИ</h2>
-                <div class="users-table-container">
-                    <table class="users-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>ID</th>
-                                <th>Юзернейм</th>
-                                <th>Подключен</th>
-                            </tr>
-                        </thead>
-                        <tbody id="usersTableBody">
-                            <tr>
-                                <td colspan="4" class="loading-text">Загрузка данных...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-
-        <!-- ФУТЕР -->
-        <footer>
-            <div class="container">
-                <p>© 2026 <strong>ADMIN BOT</strong> — Панель управления ботом</p>
-                <p class="footer-small">⚡ Только для администраторов</p>
-            </div>
-        </footer>
-    </div>
-
-    <script src="script.js"></script>
-</body>
-</html>
+                            <
