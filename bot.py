@@ -5,6 +5,7 @@ import logging
 import re
 import requests
 import random
+import json
 import phonenumbers
 from phonenumbers import carrier, geocoder, timezone
 from datetime import datetime
@@ -34,11 +35,33 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# ========== ФАЙЛ ДЛЯ ХРАНЕНИЯ ВЛАДЕЛЬЦЕВ ==========
+OWNERS_FILE = "owners.json"
+
+# ========== ЗАГРУЗКА ВЛАДЕЛЬЦЕВ ==========
+def load_owners():
+    try:
+        if os.path.exists(OWNERS_FILE):
+            with open(OWNERS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return {}
+    except Exception as e:
+        logger.error(f"❌ Ошибка загрузки owners.json: {e}")
+        return {}
+
+def save_owners(owners):
+    try:
+        with open(OWNERS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(owners, f, indent=2, ensure_ascii=False)
+        logger.info(f"✅ Владельцы сохранены: {len(owners)} записей")
+    except Exception as e:
+        logger.error(f"❌ Ошибка сохранения owners.json: {e}")
+
+# ========== ЗАГРУЗКА ДАННЫХ ==========
+owners_data = load_owners()  # {chat_id: owner_id}
+
 # ========== КЕШ СООБЩЕНИЙ ==========
 message_cache = {}
-
-# ========== ВЛАДЕЛЕЦ БИЗНЕС-АККАУНТА ==========
-business_owner_id = None  # Будет определен при первом подключении
 
 # ========== КЛАВИАТУРА ==========
 def get_spam_keyboard():
@@ -152,7 +175,7 @@ async def delete_business_message(chat_id: int, message_id: int, connection_id: 
         logger.warning(f"⚠️ Не удалось удалить через Business API: {e}")
         return False
 
-# ========== ОТПРАВКА В ЧАТ (ОТ ИМЕНИ БОТА) ==========
+# ========== ОТПРАВКА В ЧАТ ==========
 async def send_to_chat(chat_id: int, text: str, reply_markup=None):
     try:
         return await bot.send_message(
@@ -165,41 +188,39 @@ async def send_to_chat(chat_id: int, text: str, reply_markup=None):
         return None
 
 # ========== ОТПРАВКА ВЛАДЕЛЬЦУ ==========
-async def send_to_owner(text: str):
-    global business_owner_id
-    if business_owner_id:
-        try:
-            await bot.send_message(chat_id=business_owner_id, text=text)
-            logger.info(f"✅ Сообщение отправлено владельцу {business_owner_id}")
-            return True
-        except Exception as e:
-            logger.error(f"❌ Ошибка отправки владельцу: {e}")
-            return False
-    else:
-        logger.warning("⚠️ Владелец не определен!")
+async def send_to_owner(chat_id: int, text: str):
+    try:
+        await bot.send_message(chat_id=chat_id, text=text)
+        logger.info(f"✅ Сообщение отправлено владельцу {chat_id}")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Ошибка отправки владельцу: {e}")
         return False
 
 # ========== ОБРАБОТЧИК ПОДКЛЮЧЕНИЯ ==========
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
-    global business_owner_id
-    
-    # Определяем владельца бизнес-аккаунта
     if connection.user:
-        business_owner_id = connection.user.id
+        owner_id = connection.user.id
         owner_username = connection.user.username or "Нет юзернейма"
         
         logger.info("=" * 60)
         logger.info("🔗 ПОДКЛЮЧЕНИЕ К БИЗНЕС-АККАУНТУ!")
         logger.info(f"📌 ID подключения: {connection.id}")
-        logger.info(f"👤 ВЛАДЕЛЕЦ: @{owner_username} (ID: {business_owner_id})")
+        logger.info(f"👤 ВЛАДЕЛЕЦ: @{owner_username} (ID: {owner_id})")
         logger.info("=" * 60)
         
-        # Отправляем приветствие владельцу
+        # Сохраняем владельца
+        # В бизнес-чате chat_id = owner_id (это ID пользователя)
+        owners_data[str(owner_id)] = owner_id
+        save_owners(owners_data)
+        
+        # Отправляем приветствие
         await send_to_owner(
+            owner_id,
             f"✅ БОТ АКТИВЕН!\n\n"
             f"👤 Вы подключены как владелец бизнес-аккаунта.\n"
-            f"🆔 Ваш ID: {business_owner_id}\n"
+            f"🆔 Ваш ID: {owner_id}\n"
             f"📌 Команды работают только для вас!\n\n"
             f"🔥 Введите .inf для справки."
         )
@@ -252,54 +273,51 @@ async def handle_callback(callback: types.CallbackQuery):
 # ========== ОСНОВНОЙ ОБРАБОТЧИК ==========
 @dp.business_message()
 async def handle_business_message(message: types.Message):
-    global business_owner_id
-    
     try:
         logger.info("=" * 60)
         logger.info("📩 НОВОЕ СООБЩЕНИЕ ИЗ БИЗНЕС-ЧАТА")
         logger.info(f"📌 ОТ: @{message.from_user.username or 'Нет'}")
         logger.info(f"📌 ID ПОЛЬЗОВАТЕЛЯ: {message.from_user.id}")
+        logger.info(f"📌 ID ЧАТА: {message.chat.id}")
         logger.info(f"📌 ТЕКСТ: {message.text}")
         logger.info("=" * 60)
 
-        # ============================================================
-        # ПРОВЕРКА: КОМАНДЫ ТОЛЬКО ДЛЯ ВЛАДЕЛЬЦА!
-        # ============================================================
-        if not business_owner_id:
-            logger.warning("⚠️ Владелец еще не определен! Ждем подключения...")
-            return
-        
-        if message.from_user.id != business_owner_id:
-            logger.info(f"⛔ ИГНОР: @{message.from_user.username} (не владелец)")
-            
-            # Отправляем уведомление владельцу
-            await send_to_owner(
-                f"⚠️ @{message.from_user.username} (ID: {message.from_user.id}) пытался использовать бота.\n\n"
-                f"📝 Текст: {message.text}\n"
-                f"🆔 Чат: {message.chat.id}"
-            )
-            return
-
         chat_id = message.chat.id
-        message_id = message.message_id
-        from_user = message.from_user.username or "Неизвестно"
+        user_id = message.from_user.id
         connection_id = message.business_connection_id
 
         # ============================================================
-        # СОХРАНЯЕМ В КЕШ
+        # ПРОВЕРКА: ЯВЛЯЕТСЯ ЛИ ПОЛЬЗОВАТЕЛЬ ВЛАДЕЛЬЦЕМ ЭТОГО ЧАТА?
         # ============================================================
-        cache_key = f"{chat_id}_{message_id}"
-        text = message.text or "[Медиафайл]"
-        message_cache[cache_key] = (text, from_user, message.date)
-        
-        if len(message_cache) > 500:
-            oldest = min(message_cache.keys())
-            del message_cache[oldest]
+        # В бизнес-чате chat_id = owner_id
+        # Если chat_id == user_id, значит это владелец этого чата
+        if chat_id != user_id:
+            logger.info(f"⛔ ИГНОР: @{message.from_user.username} (не владелец чата {chat_id})")
+            return
+
+        # Проверяем, есть ли владелец в файле
+        if str(user_id) not in owners_data:
+            logger.info(f"📝 Новый владелец: {user_id}, добавляем в owners.json")
+            owners_data[str(user_id)] = user_id
+            save_owners(owners_data)
 
         if not message.text:
             return
 
         text = message.text
+        message_id = message.message_id
+        from_user = message.from_user.username or "Неизвестно"
+
+        # ============================================================
+        # СОХРАНЯЕМ В КЕШ
+        # ============================================================
+        cache_key = f"{chat_id}_{message_id}"
+        msg_text = message.text or "[Медиафайл]"
+        message_cache[cache_key] = (msg_text, from_user, message.date)
+        
+        if len(message_cache) > 500:
+            oldest = min(message_cache.keys())
+            del message_cache[oldest]
 
         # ============================================================
         # .inf - СПРАВКА
@@ -495,22 +513,26 @@ async def start_command(message: types.Message):
     await message.answer(
         "🤖 БОТ ДЛЯ БИЗНЕС-ЧАТОВ\n\n"
         "📌 Введи .inf для справки\n\n"
-        "📌 КОМАНДЫ РАБОТАЮТ ТОЛЬКО ДЛЯ ВЛАДЕЛЬЦА!\n\n"
+        "📌 КАК ЭТО РАБОТАЕТ:\n"
+        "1. Подключи бота через Telegram Business\n"
+        "2. Бот запомнит тебя как владельца\n"
+        "3. Команды работают ТОЛЬКО для тебя\n"
+        "4. В каждом чате свой владелец!\n\n"
+        "📌 КОМАНДЫ:\n"
         ".whois ip [IP] - пробив по IP\n"
         ".whois number [НОМЕР] - пробив по номеру\n"
         ".spam [Кол-во] [Текст] - спам\n"
         ".spams - спам-меню\n"
         ".ping - проверка\n"
-        ".inf - справка\n\n"
-        "🔥 Подключи бота через Telegram Business!"
+        ".inf - справка"
     )
 
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
-    logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info("📌 Ожидаем подключения бизнес-аккаунта...")
-    logger.info("📌 После подключения определится владелец автоматически!")
+    logger.info("🔥 МНОГОПОЛЬЗОВАТЕЛЬСКИЙ БОТ ЗАПУЩЕН!")
+    logger.info(f"📌 Загружено владельцев: {len(owners_data)}")
+    logger.info("📌 Каждый пользователь — владелец своего чата!")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
