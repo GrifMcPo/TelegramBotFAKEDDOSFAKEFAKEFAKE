@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "8857252828"))
 
 if not BOT_TOKEN:
     logger.error("❌ Токен не найден!")
@@ -37,6 +36,9 @@ dp = Dispatcher()
 
 # ========== КЕШ СООБЩЕНИЙ ==========
 message_cache = {}
+
+# ========== ВЛАДЕЛЕЦ БИЗНЕС-АККАУНТА ==========
+business_owner_id = None  # Будет определен при первом подключении
 
 # ========== КЛАВИАТУРА ==========
 def get_spam_keyboard():
@@ -60,9 +62,6 @@ INSULTS = [
     "Твой папаша настолько ленивый, что даже дышит через раз!",
     "Ты такой никчемный, что даже интернет тебя не хочет!"
 ]
-
-# ========== ВЛАДЕЛЕЦ БИЗНЕС-АККАУНТА ==========
-BUSINESS_OWNER_ID = 8857252828  # ТВОЙ ID
 
 # ========== ФУНКЦИЯ ДЛЯ ПРОБИВА IP ==========
 async def get_ip_info(ip: str):
@@ -165,24 +164,47 @@ async def send_to_chat(chat_id: int, text: str, reply_markup=None):
         logger.error(f"❌ Ошибка отправки в чат {chat_id}: {e}")
         return None
 
-# ========== ОТПРАВКА В ЛС ВЛАДЕЛЬЦУ ==========
+# ========== ОТПРАВКА ВЛАДЕЛЬЦУ ==========
 async def send_to_owner(text: str):
-    try:
-        await bot.send_message(chat_id=BUSINESS_OWNER_ID, text=text)
-        logger.info(f"✅ Сообщение отправлено владельцу")
-        return True
-    except Exception as e:
-        logger.error(f"❌ Ошибка отправки владельцу: {e}")
+    global business_owner_id
+    if business_owner_id:
+        try:
+            await bot.send_message(chat_id=business_owner_id, text=text)
+            logger.info(f"✅ Сообщение отправлено владельцу {business_owner_id}")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки владельцу: {e}")
+            return False
+    else:
+        logger.warning("⚠️ Владелец не определен!")
         return False
 
 # ========== ОБРАБОТЧИК ПОДКЛЮЧЕНИЯ ==========
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
-    logger.info("=" * 60)
-    logger.info("🔗 ПОДКЛЮЧЕНИЕ К БИЗНЕС-АККАУНТУ!")
-    logger.info(f"📌 ID подключения: {connection.id}")
-    logger.info(f"📌 Пользователь: @{connection.user.username if connection.user else 'Нет'}")
-    logger.info("=" * 60)
+    global business_owner_id
+    
+    # Определяем владельца бизнес-аккаунта
+    if connection.user:
+        business_owner_id = connection.user.id
+        owner_username = connection.user.username or "Нет юзернейма"
+        
+        logger.info("=" * 60)
+        logger.info("🔗 ПОДКЛЮЧЕНИЕ К БИЗНЕС-АККАУНТУ!")
+        logger.info(f"📌 ID подключения: {connection.id}")
+        logger.info(f"👤 ВЛАДЕЛЕЦ: @{owner_username} (ID: {business_owner_id})")
+        logger.info("=" * 60)
+        
+        # Отправляем приветствие владельцу
+        await send_to_owner(
+            f"✅ БОТ АКТИВЕН!\n\n"
+            f"👤 Вы подключены как владелец бизнес-аккаунта.\n"
+            f"🆔 Ваш ID: {business_owner_id}\n"
+            f"📌 Команды работают только для вас!\n\n"
+            f"🔥 Введите .inf для справки."
+        )
+    else:
+        logger.warning("⚠️ Не удалось определить владельца!")
 
 # ========== ОБРАБОТЧИК НАЖАТИЯ КНОПОК ==========
 @dp.callback_query()
@@ -230,6 +252,8 @@ async def handle_callback(callback: types.CallbackQuery):
 # ========== ОСНОВНОЙ ОБРАБОТЧИК ==========
 @dp.business_message()
 async def handle_business_message(message: types.Message):
+    global business_owner_id
+    
     try:
         logger.info("=" * 60)
         logger.info("📩 НОВОЕ СООБЩЕНИЕ ИЗ БИЗНЕС-ЧАТА")
@@ -239,17 +263,21 @@ async def handle_business_message(message: types.Message):
         logger.info("=" * 60)
 
         # ============================================================
-        # ПРОВЕРКА: ЕСЛИ НЕ ВЛАДЕЛЕЦ — ПОЛНОСТЬЮ ИГНОРИРУЕМ!
+        # ПРОВЕРКА: КОМАНДЫ ТОЛЬКО ДЛЯ ВЛАДЕЛЬЦА!
         # ============================================================
-        if message.from_user.id != BUSINESS_OWNER_ID:
-            logger.info(f"⛔ ИГНОР: сообщение от @{message.from_user.username} (не владелец)")
+        if not business_owner_id:
+            logger.warning("⚠️ Владелец еще не определен! Ждем подключения...")
+            return
+        
+        if message.from_user.id != business_owner_id:
+            logger.info(f"⛔ ИГНОР: @{message.from_user.username} (не владелец)")
+            
             # Отправляем уведомление владельцу
             await send_to_owner(
                 f"⚠️ @{message.from_user.username} (ID: {message.from_user.id}) пытался использовать бота.\n\n"
                 f"📝 Текст: {message.text}\n"
                 f"🆔 Чат: {message.chat.id}"
             )
-            # ВОЗВРАЩАЕМСЯ — НИЧЕГО НЕ ДЕЛАЕМ!
             return
 
         chat_id = message.chat.id
@@ -258,7 +286,7 @@ async def handle_business_message(message: types.Message):
         connection_id = message.business_connection_id
 
         # ============================================================
-        # СОХРАНЯЕМ ВСЕ СООБЩЕНИЯ В КЕШ
+        # СОХРАНЯЕМ В КЕШ
         # ============================================================
         cache_key = f"{chat_id}_{message_id}"
         text = message.text or "[Медиафайл]"
@@ -302,7 +330,7 @@ async def handle_business_message(message: types.Message):
             return
 
         # ============================================================
-        # .spam [КОЛ-ВО] [ТЕКСТ]
+        # .spam
         # ============================================================
         if text.lower().startswith('.spam') and not text.lower().startswith('.spams'):
             logger.info("🎯 .spam")
@@ -360,7 +388,7 @@ async def handle_business_message(message: types.Message):
             return
 
         # ============================================================
-        # .spams - СПАМ-МЕНЮ
+        # .spams
         # ============================================================
         if text.lower() == '.spams':
             logger.info("🎯 .spams")
@@ -473,16 +501,16 @@ async def start_command(message: types.Message):
         ".spam [Кол-во] [Текст] - спам\n"
         ".spams - спам-меню\n"
         ".ping - проверка\n"
-        ".inf - справка"
+        ".inf - справка\n\n"
+        "🔥 Подключи бота через Telegram Business!"
     )
 
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info(f"👤 ВЛАДЕЛЕЦ: {BUSINESS_OWNER_ID}")
-    logger.info("📌 Команды работают ТОЛЬКО для владельца!")
-    logger.info("📌 Чужие команды ПОЛНОСТЬЮ игнорируются!")
+    logger.info("📌 Ожидаем подключения бизнес-аккаунта...")
+    logger.info("📌 После подключения определится владелец автоматически!")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
