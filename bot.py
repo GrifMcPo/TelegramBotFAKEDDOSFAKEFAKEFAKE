@@ -170,7 +170,6 @@ async def handle_business_connection(connection: BusinessConnection):
     logger.info("🔗 ПОДКЛЮЧЕНИЕ К БИЗНЕС-АККАУНТУ!")
     logger.info(f"📌 ID подключения: {connection.id}")
     logger.info(f"📌 Пользователь: @{connection.user.username if connection.user else 'Нет'}")
-    logger.info(f"📌 Может удалять сообщения: {connection.can_delete_all_messages}")
     logger.info("=" * 60)
 
 # ========== ОБРАБОТЧИК НАЖАТИЯ КНОПОК ==========
@@ -245,7 +244,6 @@ async def handle_business_message(message: types.Message):
         if text.lower() == '.inf':
             logger.info("🎯 .inf")
             
-            # УДАЛЯЕМ КОМАНДУ
             await delete_business_message(chat_id, message_id, connection_id)
             
             await send_business_message(
@@ -281,7 +279,6 @@ async def handle_business_message(message: types.Message):
         if text.lower() == '.mute':
             logger.info("🎯 .mute")
             
-            # УДАЛЯЕМ КОМАНДУ
             await delete_business_message(chat_id, message_id, connection_id)
             
             muted_chats[chat_id] = True
@@ -306,7 +303,6 @@ async def handle_business_message(message: types.Message):
         if text.lower() == '.unmute':
             logger.info("🎯 .unmute")
             
-            # УДАЛЯЕМ КОМАНДУ
             await delete_business_message(chat_id, message_id, connection_id)
             
             if chat_id in muted_chats:
@@ -363,7 +359,6 @@ async def handle_business_message(message: types.Message):
                 await send_business_message(chat_id, "❌ Максимум 100 сообщений за раз!", connection_id)
                 return
             
-            # УДАЛЯЕМ КОМАНДУ
             await delete_business_message(chat_id, message_id, connection_id)
             
             await send_business_message(
@@ -395,7 +390,6 @@ async def handle_business_message(message: types.Message):
         if text.lower() == '.spams':
             logger.info("🎯 .spams")
             
-            # УДАЛЯЕМ КОМАНДУ
             await delete_business_message(chat_id, message_id, connection_id)
             
             await send_business_message(
@@ -438,7 +432,6 @@ async def handle_business_message(message: types.Message):
                     await send_business_message(chat_id, f"❌ Некорректный IP: {target}\n📌 Пример: 8.8.8.8", connection_id)
                     return
                 
-                # УДАЛЯЕМ КОМАНДУ
                 await delete_business_message(chat_id, message_id, connection_id)
                 
                 result = await get_ip_info(target)
@@ -447,7 +440,6 @@ async def handle_business_message(message: types.Message):
                 return
             
             elif command_type == 'number':
-                # УДАЛЯЕМ КОМАНДУ
                 await delete_business_message(chat_id, message_id, connection_id)
                 
                 result = await get_phone_info(target)
@@ -472,7 +464,6 @@ async def handle_business_message(message: types.Message):
         if text.lower() == '.ping':
             logger.info("🎯 .ping")
             
-            # УДАЛЯЕМ КОМАНДУ
             await delete_business_message(chat_id, message_id, connection_id)
             
             await send_business_message(
@@ -490,7 +481,6 @@ async def handle_business_message(message: types.Message):
         if text.lower() == '/chatid':
             logger.info("🎯 /chatid")
             
-            # УДАЛЯЕМ КОМАНДУ
             await delete_business_message(chat_id, message_id, connection_id)
             
             await send_business_message(
@@ -510,15 +500,12 @@ async def handle_business_message(message: types.Message):
         # ЕСЛИ ВКЛЮЧЕН МУТ — УДАЛЯЕМ ВСЕ СООБЩЕНИЯ СОБЕСЕДНИКА
         # ============================================================
         if chat_id in muted_chats:
-            # Не удаляем сообщения от самого бота
             if message.from_user.id == (await bot.get_me()).id:
                 return
             
-            # Проверяем, что это не команда от пользователя
             if text.startswith('.'):
                 return
             
-            # Удаляем сообщение собеседника через Business API
             await delete_business_message(chat_id, message_id, connection_id)
             logger.info(f"🗑️ Удалено сообщение собеседника в замученном чате {chat_id}")
             return
