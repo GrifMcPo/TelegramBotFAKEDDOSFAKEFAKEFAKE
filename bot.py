@@ -129,16 +129,24 @@ async def get_phone_info(phone: str):
     except Exception as e:
         return {'success': False, 'text': f"❌ Ошибка: {str(e)}"}
 
-# ========== УДАЛЕНИЕ ЧЕРЕЗ BUSINESS API ==========
+# ========== УДАЛЕНИЕ ЧЕРЕЗ ПРЯМОЙ API-ЗАПРОС ==========
 async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
-    """Удаляет сообщение через Business API"""
+    """Удаляет сообщение через прямой API-запрос к Telegram"""
     try:
-        await bot.delete_business_messages(
-            business_connection_id=connection_id,
-            message_ids=[message_id]
-        )
-        logger.info(f"🗑️ Сообщение {message_id} удалено через Business API")
-        return True
+        url = f'https://api.telegram.org/bot{BOT_TOKEN}/deleteBusinessMessages'
+        payload = {
+            "business_connection_id": connection_id,
+            "message_ids": [message_id]
+        }
+        response = requests.post(url, json=payload, timeout=10)
+        result = response.json()
+        
+        if result.get('ok'):
+            logger.info(f"🗑️ Сообщение {message_id} удалено через Business API")
+            return True
+        else:
+            logger.warning(f"⚠️ Ошибка удаления: {result.get('description', 'Неизвестная ошибка')}")
+            return False
     except Exception as e:
         logger.warning(f"⚠️ Не удалось удалить через Business API: {e}")
         return False
@@ -236,7 +244,6 @@ async def handle_business_message(message: types.Message):
         chat_id = message.chat.id
         message_id = message.message_id
         connection_id = message.business_connection_id
-        user_id = message.from_user.id
 
         # ============================================================
         # .inf - СПРАВКА
@@ -258,7 +265,7 @@ async def handle_business_message(message: types.Message):
                     "> .whois number [НОМЕР] - Пробив по номеру телефона\n\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     "🔇 МУТ\n\n"
-                    "> .mute - Включить мут (удалять сообщения собеседника)\n"
+                    "> .mute - Включить мут\n"
                     "> .unmute - Выключить мут\n\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     "🔥 СПАМ\n\n"
@@ -539,7 +546,7 @@ async def start_command(message: types.Message):
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info("📌 Бот использует deleteBusinessMessages")
+    logger.info("📌 Бот использует deleteBusinessMessages через прямой API")
     logger.info("📌 Команды УДАЛЯЮТСЯ!")
     logger.info("=" * 60)
     await dp.start_polling(bot)
