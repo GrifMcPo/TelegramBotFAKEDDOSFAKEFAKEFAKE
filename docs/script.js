@@ -10,6 +10,15 @@ const VALID_KEYS = [
 ];
 
 // ============================================================
+// URL ДЛЯ ДАННЫХ
+// ============================================================
+// Для GitHub Pages данные берутся из репозитория
+// Файлы users.json и stats.json создаются ботом
+const DATA_URL = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/';
+// ИЛИ если сайт на GitHub Pages:
+// const DATA_URL = 'https://grifmcpo.github.io/TelegramBotFAKEDDOSFAKEFAKEFAKE/';
+
+// ============================================================
 // ЭЛЕМЕНТЫ
 // ============================================================
 const loginPage = document.getElementById('loginPage');
@@ -29,7 +38,7 @@ function login() {
         loginPage.style.display = 'none';
         mainPage.style.display = 'block';
         loginError.classList.remove('show');
-        loadData();
+        loadAllData();
     } else {
         loginError.classList.add('show');
         keyInput.value = '';
@@ -39,7 +48,6 @@ function login() {
 }
 
 loginBtn.addEventListener('click', login);
-
 keyInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') login();
 });
@@ -57,36 +65,78 @@ logoutBtn.addEventListener('click', () => {
 // ============================================================
 // ЗАГРУЗКА ДАННЫХ
 // ============================================================
-function loadData() {
-    // Статистика (заглушка)
-    document.getElementById('statUsers').textContent = '42';
-    document.getElementById('statCommands').textContent = '1,337';
-    document.getElementById('statUptime').textContent = '2ч 17м';
-    document.getElementById('statStatus').textContent = '✅';
+async function loadAllData() {
+    await loadUsers();
+    await loadStats();
+    await loadCommands();
+}
 
-    // Пользователи (заглушка)
-    const users = [
-        { id: '8308522569', username: 'SlNpidora', connected: '18.08.2026 22:43' },
-        { id: '8857252828', username: 'GrifMcPo', connected: '18.08.2026 22:45' },
-    ];
+async function loadUsers() {
+    try {
+        const response = await fetch(DATA_URL + 'users.json?t=' + Date.now());
+        if (!response.ok) throw new Error('Файл users.json не найден');
+        const data = await response.json();
+        
+        const userIds = Object.keys(data);
+        document.getElementById('statUsers').textContent = userIds.length;
+        
+        const tbody = document.getElementById('usersTableBody');
+        if (userIds.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="loading-text">Нет подключенных пользователей</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = userIds.map((id, i) => {
+            const user = data[id];
+            return `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td>${id}</td>
+                    <td>@${user.username || 'Нет'}</td>
+                    <td>${user.connected_at || 'Неизвестно'}</td>
+                </tr>
+            `;
+        }).join('');
+        
+        // Обновляем время последнего обновления
+        document.getElementById('statUptime').textContent = new Date().toLocaleTimeString('ru-RU');
+        
+    } catch (error) {
+        console.error('❌ Ошибка загрузки users.json:', error);
+        document.getElementById('usersTableBody').innerHTML = '<tr><td colspan="4" class="loading-text">❌ Ошибка загрузки данных</td></tr>';
+    }
+}
 
-    const tbody = document.getElementById('usersTableBody');
-    tbody.innerHTML = users.map((u, i) => `
-        <tr>
-            <td>${i + 1}</td>
-            <td>${u.id}</td>
-            <td>@${u.username}</td>
-            <td>${u.connected}</td>
-        </tr>
-    `).join('');
+async function loadStats() {
+    try {
+        const response = await fetch(DATA_URL + 'stats.json?t=' + Date.now());
+        if (!response.ok) throw new Error('Файл stats.json не найден');
+        const data = await response.json();
+        
+        document.getElementById('statCommands').textContent = data.total_commands || 0;
+        document.getElementById('statStatus').textContent = data.total_connections > 0 ? '🟢 Онлайн' : '🔴 Оффлайн';
+        
+    } catch (error) {
+        console.error('❌ Ошибка загрузки stats.json:', error);
+    }
+}
+
+async function loadCommands() {
+    // Команды уже есть в HTML, просто обновляем время
+    const now = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+    document.querySelector('.footer-small').textContent = `🕐 Данные обновлены: ${now} (МСК)`;
 }
 
 // ============================================================
-// КНОПКИ ДЛЯ ДЕМОНСТРАЦИИ
+// АВТООБНОВЛЕНИЕ (КАЖДЫЕ 30 СЕКУНД)
+// ============================================================
+setInterval(loadAllData, 30000);
+
+// ============================================================
+// ЭФФЕКТЫ
 // ============================================================
 document.querySelectorAll('.stat-card').forEach(card => {
     card.addEventListener('click', () => {
-        // Просто анимация для красоты
         card.style.transition = 'all 0.2s';
         card.style.transform = 'scale(0.95)';
         setTimeout(() => card.style.transform = 'scale(1)', 200);
