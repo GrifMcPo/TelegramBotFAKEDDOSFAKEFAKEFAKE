@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADMIN BOT — Панель управления</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- ============================================================ -->
+    <!-- СТРАНИЦА ВХОДА (ПО УМОЛЧАНИЮ ВИДНА) -->
+    <!-- ============================================================ -->
+    <div id="loginPage" class="login-page">
+        <div class="login-container">
+            <div class="login-header">
+                <h1>⚡ ADMIN BOT</h1>
+                <p>Панель управления</p>
+            </div>
+            
+            <div class="login-box">
+                <div class="login-title">🔑 ВВЕДИТЕ КЛЮЧ ДОСТУПА</div>
+                
+                <div class="login-input-group">
+                    <input type="password" id="keyInput" placeholder="Введите ключ..." autofocus>
+                    <button id="loginBtn">ВОЙТИ</button>
+                </div>
+                
+                <div id="loginError" class="login-error">❌ Неверный ключ доступа!</div>
+                
+                <div class="login-hint">
+                    <p>💡 Ключ можно получить у владельца бота</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- RGB Анимация фона -->
+        <div class="rgb-bg"></div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- ГЛАВНАЯ СТРАНИЦА (СКРЫТА ПО УМОЛЧАНИЮ) -->
+    <!-- ============================================================ -->
+    <div id="mainPage" class="main-page" style="display: none;">
+        
+        <!-- ШАПКА -->
+        <header>
+            <div class="header-container">
+                <div class="header-logo">
+                    <span>⚡</span>
+                    <h1>ADMIN BOT</h1>
+                </div>
+                <div class="header-user">
+                    <span>👤 Администратор</span>
+                    <button id="logoutBtn" class="logout-btn">🚪 Выйти</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- СТАТИСТИКА -->
+        <section class="dashboard">
+            <div class="container">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">👤</div>
+                        <div class="stat-number" id="statUsers">0</div>
+                        <div class="stat-label">Пользователей</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">📝</div>
+                        <div class="stat-number" id="statCommands">0</div>
+                        <div class="stat-label">Выполнено команд</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">⏱️</div>
+                        <div class="stat-number" id="statUptime">0</div>
+                        <div class="stat-label">Время работы</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">📡</div>
+                        <div class="stat-number" id="statStatus">✅</div>
+                        <div class="stat-label">Статус бота</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- КОМАНДЫ -->
+        <section class="commands-section">
+            <div class="container">
+                <h2>📋 ДОСТУПНЫЕ КОМАНДЫ</h2>
+                <div class="commands-grid">
+                    <div class="command-card">
+                        <span class="cmd-icon">🐢</span>
+                        <div class="cmd-info">
+                            <div class="cmd-name">.inf</div>
+                            <div class="cmd-desc">Справка по командам</div>
+                        </div>
+                    </div>
+                    <div class="command-card">
+                        <span class="cmd-icon">🌐</span>
+                        <div class="cmd-info">
+                            <div class="cmd-name">.whois ip [IP]</div>
+                            <div class="cmd-desc">Пробив по IP-адресу</div>
+                        </div>
+                    </div>
+                    <div class="command-card">
+                        <span class="cmd-icon">📱</span>
+                        <div class="cmd-info">
+                            <div class="cmd-name">.whois number [НОМЕР]</div>
+                            <div class="cmd-desc">Пробив по номеру телефона</div>
+                        </div>
+                    </div>
+                    <div class="command-card">
+                        <span class="cmd-icon">🔥</span>
+                        <div class="cmd-info">
+                            <div class="cmd-name">.spam [N] [ТЕКСТ]</div>
+                            <div class="cmd-desc">Спам текстом N раз</div>
+                        </div>
+                    </div>
+                    <div class="command-card">
+                        <span class="cmd-icon">🎯</span>
+                        <div class="cmd-info">
+                            <div class="cmd-name">.spams</div>
+                            <div class="cmd-desc">Спам-меню с кнопками</div>
+                        </div>
+                    </div>
+                    <div class="command-card">
+                        <span class="cmd-icon">🏓</span>
+                        <div class="cmd-info">
+                            <div class="cmd-name">.ping</div>
+                            <div class="cmd-desc">Проверка работы бота</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ПОЛЬЗОВАТЕЛИ -->
+        <section class="users-section">
+            <div class="container">
+                <h2>👤 АКТИВНЫЕ ПОЛЬЗОВАТЕЛИ</h2>
+                <div class="users-table-container">
+                    <table class="users-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>ID</th>
+                                <th>Юзернейм</th>
+                                <th>Подключен</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <tr>
+                                <td colspan="4" class="loading-text">Загрузка данных...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ФУТЕР -->
+        <footer>
+            <div class="container">
+                <p>© 2026 <strong>ADMIN BOT</strong> — Панель управления ботом</p>
+                <p class="footer-small">⚡ Только для администраторов</p>
+            </div>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
