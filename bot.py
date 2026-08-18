@@ -61,6 +61,10 @@ INSULTS = [
     "Ты такой никчемный, что даже интернет тебя не хочет!"
 ]
 
+# ========== ВЛАДЕЛЕЦ БИЗНЕС-АККАУНТА ==========
+# ID пользователя, которому принадлежит бизнес-аккаунт
+BUSINESS_OWNER_ID = 8857252828  # ТВОЙ ID
+
 # ========== ФУНКЦИЯ ДЛЯ ПРОБИВА IP ==========
 async def get_ip_info(ip: str):
     try:
@@ -150,9 +154,8 @@ async def delete_business_message(chat_id: int, message_id: int, connection_id: 
         logger.warning(f"⚠️ Не удалось удалить через Business API: {e}")
         return False
 
-# ========== ОТПРАВКА В БИЗНЕС-ЧАТ (ОТ СВОЕГО ИМЕНИ) ==========
+# ========== ОТПРАВКА В ЧАТ (ОТ ИМЕНИ БОТА) ==========
 async def send_to_chat(chat_id: int, text: str, reply_markup=None):
-    """Отправляет сообщение от ИМЕНИ БОТА (не от бизнес-аккаунта)"""
     try:
         return await bot.send_message(
             chat_id=chat_id,
@@ -160,17 +163,17 @@ async def send_to_chat(chat_id: int, text: str, reply_markup=None):
             reply_markup=reply_markup
         )
     except Exception as e:
-        logger.error(f"❌ Ошибка отправки: {e}")
+        logger.error(f"❌ Ошибка отправки в чат {chat_id}: {e}")
         return None
 
-# ========== ОТПРАВКА ОТЧЕТА АДМИНУ ==========
-async def send_report_to_admin(text: str):
+# ========== ОТПРАВКА В ЛС ВЛАДЕЛЬЦУ ==========
+async def send_to_owner(text: str):
     try:
-        await bot.send_message(chat_id=ADMIN_ID, text=text)
-        logger.info(f"✅ Отчет отправлен админу {ADMIN_ID}")
+        await bot.send_message(chat_id=BUSINESS_OWNER_ID, text=text)
+        logger.info(f"✅ Сообщение отправлено владельцу")
         return True
     except Exception as e:
-        logger.error(f"❌ Ошибка отправки админу: {e}")
+        logger.error(f"❌ Ошибка отправки владельцу: {e}")
         return False
 
 # ========== ОБРАБОТЧИК ПОДКЛЮЧЕНИЯ ==========
@@ -232,9 +235,20 @@ async def handle_business_message(message: types.Message):
         logger.info("=" * 60)
         logger.info("📩 НОВОЕ СООБЩЕНИЕ ИЗ БИЗНЕС-ЧАТА")
         logger.info(f"📌 ОТ: @{message.from_user.username or 'Нет'}")
+        logger.info(f"📌 ID ПОЛЬЗОВАТЕЛЯ: {message.from_user.id}")
         logger.info(f"📌 ТЕКСТ: {message.text}")
-        logger.info(f"📌 ID СООБЩЕНИЯ: {message.message_id}")
         logger.info("=" * 60)
+
+        # ============================================================
+        # ПРОВЕРКА: КОМАНДЫ РАБОТАЮТ ТОЛЬКО ДЛЯ ВЛАДЕЛЬЦА!
+        # ============================================================
+        if message.from_user.id != BUSINESS_OWNER_ID:
+            logger.info(f"⏭️ ИГНОР: команда от @{message.from_user.username} (не владелец)")
+            # Можем отправить владельцу уведомление, что кто-то пытался использовать бота
+            await send_to_owner(
+                f"⚠️ @{message.from_user.username} (ID: {message.from_user.id}) попытался использовать бота в чате {message.chat.id}\n\nТекст: {message.text}"
+            )
+            return
 
         chat_id = message.chat.id
         message_id = message.message_id
@@ -451,22 +465,21 @@ async def start_command(message: types.Message):
     await message.answer(
         "🤖 БОТ ДЛЯ БИЗНЕС-ЧАТОВ\n\n"
         "📌 Введи .inf для справки\n\n"
-        "📌 КОМАНДЫ:\n"
+        "📌 КОМАНДЫ РАБОТАЮТ ТОЛЬКО ДЛЯ ВЛАДЕЛЬЦА!\n\n"
         ".whois ip [IP] - пробив по IP\n"
         ".whois number [НОМЕР] - пробив по номеру\n"
         ".spam [Кол-во] [Текст] - спам\n"
         ".spams - спам-меню\n"
         ".ping - проверка\n"
-        ".inf - справка\n\n"
-        "🔥 Бот отвечает ОТ СВОЕГО ИМЕНИ!"
+        ".inf - справка"
     )
 
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info("📌 Бот отвечает ОТ СВОЕГО ИМЕНИ в бизнес-чатах")
-    logger.info("📌 Команды удаляются через Business API")
+    logger.info(f"👤 ВЛАДЕЛЕЦ БИЗНЕС-АККАУНТА: {BUSINESS_OWNER_ID}")
+    logger.info("📌 Команды работают ТОЛЬКО для владельца!")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
