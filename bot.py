@@ -38,7 +38,6 @@ dp = Dispatcher()
 # ========== ФАЙЛ ДЛЯ ХРАНЕНИЯ ПОЛЬЗОВАТЕЛЕЙ ==========
 USERS_FILE = "users.json"
 
-# ========== ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ ==========
 def load_users():
     try:
         if os.path.exists(USERS_FILE):
@@ -57,13 +56,9 @@ def save_users(users):
     except Exception as e:
         logger.error(f"❌ Ошибка сохранения users.json: {e}")
 
-# ========== ЗАГРУЗКА ДАННЫХ ==========
 users_data = load_users()
-
-# ========== КЕШ СООБЩЕНИЙ ==========
 message_cache = {}
 
-# ========== КЛАВИАТУРА ==========
 def get_spam_keyboard():
     buttons = [
         [InlineKeyboardButton(text="🔥 Троллинг спам", callback_data="spam_troll")],
@@ -72,7 +67,6 @@ def get_spam_keyboard():
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-# ========== ОСКОРБЛЕНИЯ ==========
 INSULTS = [
     "хахах что ты пидорасина в себя поверил?",
     "Сколько твоя мамка в час берет? или бесплатно ха-ха",
@@ -86,7 +80,6 @@ INSULTS = [
     "Ты такой никчемный, что даже интернет тебя не хочет!"
 ]
 
-# ========== ФУНКЦИЯ ДЛЯ ПРОБИВА IP ==========
 async def get_ip_info(ip: str):
     try:
         response = requests.get(
@@ -118,7 +111,6 @@ async def get_ip_info(ip: str):
     except Exception as e:
         return {'success': False, 'text': f"❌ Ошибка: {str(e)}"}
 
-# ========== ФУНКЦИЯ ДЛЯ ПРОБИВА НОМЕРА ==========
 async def get_phone_info(phone: str):
     try:
         phone_clean = phone.replace('+', '').replace('-', '').replace('(', '').replace(')', '').replace(' ', '')
@@ -154,7 +146,6 @@ async def get_phone_info(phone: str):
     except Exception as e:
         return {'success': False, 'text': f"❌ Ошибка: {str(e)}"}
 
-# ========== УДАЛЕНИЕ ЧЕРЕЗ ПРЯМОЙ API ==========
 async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
     try:
         url = f'https://api.telegram.org/bot{BOT_TOKEN}/deleteBusinessMessages'
@@ -175,7 +166,7 @@ async def delete_business_message(chat_id: int, message_id: int, connection_id: 
         logger.warning(f"⚠️ Не удалось удалить через Business API: {e}")
         return False
 
-# ========== ОТПРАВКА В ТОТ ЖЕ ЧАТ (ОТ ИМЕНИ БОТА) ==========
+# ========== ГЛАВНАЯ ФУНКЦИЯ ОТПРАВКИ ==========
 async def send_to_chat(chat_id: int, text: str, reply_markup=None):
     """Отправляет сообщение в указанный чат от имени бота"""
     try:
@@ -279,9 +270,7 @@ async def handle_business_message(message: types.Message):
         chat_id = message.chat.id
         connection_id = message.business_connection_id
 
-        # ============================================================
         # ПРОВЕРКА: ЕСТЬ ЛИ ПОЛЬЗОВАТЕЛЬ В users.json?
-        # ============================================================
         if str(user_id) not in users_data:
             logger.info(f"⛔ ИГНОР: @{message.from_user.username} (нет в users.json)")
             return
@@ -293,7 +282,7 @@ async def handle_business_message(message: types.Message):
         message_id = message.message_id
 
         # ============================================================
-        # .inf - СПРАВКА
+        # .inf
         # ============================================================
         if text.lower() == '.inf':
             logger.info("🎯 .inf")
@@ -495,12 +484,11 @@ async def start_command(message: types.Message):
         ".inf - справка"
     )
 
-# ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
     logger.info(f"📌 Загружено пользователей: {len(users_data)}")
-    logger.info("📌 Бот отвечает В ТОТ ЖЕ ЧАТ, где была команда")
+    logger.info("📌 Бот отвечает В ТОТ ЖЕ ЧАТ от имени бота!")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
