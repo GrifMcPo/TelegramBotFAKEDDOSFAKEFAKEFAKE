@@ -58,7 +58,7 @@ def save_owners(owners):
         logger.error(f"❌ Ошибка сохранения owners.json: {e}")
 
 # ========== ЗАГРУЗКА ДАННЫХ ==========
-owners_data = load_owners()  # {chat_id: owner_id}
+owners_data = load_owners()  # {user_id: user_id}
 
 # ========== КЕШ СООБЩЕНИЙ ==========
 message_cache = {}
@@ -188,10 +188,10 @@ async def send_to_chat(chat_id: int, text: str, reply_markup=None):
         return None
 
 # ========== ОТПРАВКА ВЛАДЕЛЬЦУ ==========
-async def send_to_owner(chat_id: int, text: str):
+async def send_to_owner(owner_id: int, text: str):
     try:
-        await bot.send_message(chat_id=chat_id, text=text)
-        logger.info(f"✅ Сообщение отправлено владельцу {chat_id}")
+        await bot.send_message(chat_id=owner_id, text=text)
+        logger.info(f"✅ Сообщение отправлено владельцу {owner_id}")
         return True
     except Exception as e:
         logger.error(f"❌ Ошибка отправки владельцу: {e}")
@@ -211,7 +211,6 @@ async def handle_business_connection(connection: BusinessConnection):
         logger.info("=" * 60)
         
         # Сохраняем владельца
-        # В бизнес-чате chat_id = owner_id (это ID пользователя)
         owners_data[str(owner_id)] = owner_id
         save_owners(owners_data)
         
@@ -282,24 +281,17 @@ async def handle_business_message(message: types.Message):
         logger.info(f"📌 ТЕКСТ: {message.text}")
         logger.info("=" * 60)
 
-        chat_id = message.chat.id
         user_id = message.from_user.id
+        chat_id = message.chat.id
         connection_id = message.business_connection_id
 
         # ============================================================
-        # ПРОВЕРКА: ЯВЛЯЕТСЯ ЛИ ПОЛЬЗОВАТЕЛЬ ВЛАДЕЛЬЦЕМ ЭТОГО ЧАТА?
+        # ПРОВЕРКА: ЯВЛЯЕТСЯ ЛИ ПОЛЬЗОВАТЕЛЬ ВЛАДЕЛЬЦЕМ?
         # ============================================================
-        # В бизнес-чате chat_id = owner_id
-        # Если chat_id == user_id, значит это владелец этого чата
-        if chat_id != user_id:
-            logger.info(f"⛔ ИГНОР: @{message.from_user.username} (не владелец чата {chat_id})")
-            return
-
-        # Проверяем, есть ли владелец в файле
+        # Проверяем, есть ли пользователь в owners.json
         if str(user_id) not in owners_data:
-            logger.info(f"📝 Новый владелец: {user_id}, добавляем в owners.json")
-            owners_data[str(user_id)] = user_id
-            save_owners(owners_data)
+            logger.info(f"⛔ ИГНОР: @{message.from_user.username} (не владелец, нет в owners.json)")
+            return
 
         if not message.text:
             return
@@ -516,8 +508,7 @@ async def start_command(message: types.Message):
         "📌 КАК ЭТО РАБОТАЕТ:\n"
         "1. Подключи бота через Telegram Business\n"
         "2. Бот запомнит тебя как владельца\n"
-        "3. Команды работают ТОЛЬКО для тебя\n"
-        "4. В каждом чате свой владелец!\n\n"
+        "3. Команды работают ТОЛЬКО для владельцев\n\n"
         "📌 КОМАНДЫ:\n"
         ".whois ip [IP] - пробив по IP\n"
         ".whois number [НОМЕР] - пробив по номеру\n"
@@ -532,7 +523,7 @@ async def main():
     logger.info("=" * 60)
     logger.info("🔥 МНОГОПОЛЬЗОВАТЕЛЬСКИЙ БОТ ЗАПУЩЕН!")
     logger.info(f"📌 Загружено владельцев: {len(owners_data)}")
-    logger.info("📌 Каждый пользователь — владелец своего чата!")
+    logger.info("📌 Команды работают только для владельцев из owners.json")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
