@@ -36,7 +36,7 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # ========== КЕШ СООБЩЕНИЙ ==========
-message_cache = {}  # {"chat_id_message_id": (text, from_user)}
+message_cache = {}
 
 # ========== КЛАВИАТУРА ==========
 def get_spam_keyboard():
@@ -150,22 +150,15 @@ async def delete_business_message(chat_id: int, message_id: int, connection_id: 
         logger.warning(f"⚠️ Не удалось удалить через Business API: {e}")
         return False
 
-# ========== ОТПРАВКА В БИЗНЕС-ЧАТ ==========
-async def send_business_message(chat_id: int, text: str, connection_id: str = None, reply_markup=None):
+# ========== ОТПРАВКА В БИЗНЕС-ЧАТ (ОТ СВОЕГО ИМЕНИ) ==========
+async def send_to_chat(chat_id: int, text: str, reply_markup=None):
+    """Отправляет сообщение от ИМЕНИ БОТА (не от бизнес-аккаунта)"""
     try:
-        if connection_id:
-            return await bot.send_message(
-                chat_id=chat_id,
-                text=text,
-                business_connection_id=connection_id,
-                reply_markup=reply_markup
-            )
-        else:
-            return await bot.send_message(
-                chat_id=chat_id,
-                text=text,
-                reply_markup=reply_markup
-            )
+        return await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=reply_markup
+        )
     except Exception as e:
         logger.error(f"❌ Ошибка отправки: {e}")
         return None
@@ -203,24 +196,21 @@ async def handle_callback(callback: types.CallbackQuery):
         if data == "spam_troll":
             await delete_business_message(chat_id, message_id, connection_id)
             
-            await bot.send_message(
+            await send_to_chat(
                 chat_id=chat_id,
-                text="🔥 Начинаю троллинг спам...\n\n💬 Отправляю 10 оскорблений!",
-                business_connection_id=connection_id
+                text="🔥 Начинаю троллинг спам...\n\n💬 Отправляю 10 оскорблений!"
             )
             
             for i, insult in enumerate(INSULTS, 1):
-                await bot.send_message(
+                await send_to_chat(
                     chat_id=chat_id,
-                    text=f"{i}. {insult}",
-                    business_connection_id=connection_id
+                    text=f"{i}. {insult}"
                 )
                 await asyncio.sleep(0.5)
             
-            await bot.send_message(
+            await send_to_chat(
                 chat_id=chat_id,
-                text="✅ Спам завершен! Все 10 оскорблений отправлены.",
-                business_connection_id=connection_id
+                text="✅ Спам завершен! Все 10 оскорблений отправлены."
             )
             
             await callback.answer()
@@ -258,7 +248,6 @@ async def handle_business_message(message: types.Message):
         text = message.text or "[Медиафайл]"
         message_cache[cache_key] = (text, from_user, message.date)
         
-        # Ограничиваем кеш
         if len(message_cache) > 500:
             oldest = min(message_cache.keys())
             del message_cache[oldest]
@@ -274,7 +263,7 @@ async def handle_business_message(message: types.Message):
         if text.lower() == '.inf':
             logger.info("🎯 .inf")
             await delete_business_message(chat_id, message_id, connection_id)
-            await send_business_message(
+            await send_to_chat(
                 chat_id=chat_id,
                 text=(
                     "📚 Справка по командам\n\n"
@@ -292,8 +281,7 @@ async def handle_business_message(message: types.Message):
                     "⚡ ДРУГОЕ\n\n"
                     "> .ping - Проверка работы бота\n"
                     "> .inf - Эта справка"
-                ),
-                connection_id=connection_id
+                )
             )
             return
 
@@ -306,12 +294,11 @@ async def handle_business_message(message: types.Message):
             parts = text.split(maxsplit=2)
             
             if len(parts) < 3:
-                await send_business_message(
+                await send_to_chat(
                     chat_id,
                     "❌ Неправильный формат\n\n"
                     "📌 .spam [Кол-во] [Текст]\n\n"
-                    "Пример: .spam 5 Привет всем!",
-                    connection_id
+                    "Пример: .spam 5 Привет всем!"
                 )
                 return
             
@@ -319,42 +306,38 @@ async def handle_business_message(message: types.Message):
                 count = int(parts[1])
                 spam_text = parts[2]
             except ValueError:
-                await send_business_message(
+                await send_to_chat(
                     chat_id,
                     "❌ Количество должно быть числом!\n\n"
-                    "Пример: .spam 5 Привет всем!",
-                    connection_id
+                    "Пример: .spam 5 Привет всем!"
                 )
                 return
             
             if count < 1:
-                await send_business_message(chat_id, "❌ Количество должно быть больше 0!", connection_id)
+                await send_to_chat(chat_id, "❌ Количество должно быть больше 0!")
                 return
             
             if count > 100:
-                await send_business_message(chat_id, "❌ Максимум 100 сообщений за раз!", connection_id)
+                await send_to_chat(chat_id, "❌ Максимум 100 сообщений за раз!")
                 return
             
             await delete_business_message(chat_id, message_id, connection_id)
             
-            await send_business_message(
+            await send_to_chat(
                 chat_id=chat_id,
-                text=f"🔥 Начинаю спам!\n📊 {count} сообщений\n📝 Текст: {spam_text}",
-                connection_id=connection_id
+                text=f"🔥 Начинаю спам!\n📊 {count} сообщений\n📝 Текст: {spam_text}"
             )
             
             for i in range(1, count + 1):
-                await send_business_message(
+                await send_to_chat(
                     chat_id=chat_id,
-                    text=f"{i}. {spam_text}",
-                    connection_id=connection_id
+                    text=f"{i}. {spam_text}"
                 )
                 await asyncio.sleep(0.3)
             
-            await send_business_message(
+            await send_to_chat(
                 chat_id=chat_id,
-                text=f"✅ Спам завершен! Отправлено {count} сообщений.",
-                connection_id=connection_id
+                text=f"✅ Спам завершен! Отправлено {count} сообщений."
             )
             
             logger.info(f"✅ Спам {count} раз отправлен")
@@ -366,13 +349,9 @@ async def handle_business_message(message: types.Message):
         if text.lower() == '.spams':
             logger.info("🎯 .spams")
             await delete_business_message(chat_id, message_id, connection_id)
-            await send_business_message(
+            await send_to_chat(
                 chat_id=chat_id,
-                text=(
-                    "🔥 Спам-меню открыто!\n\n"
-                    "Выберите какой спам вам нужен:"
-                ),
-                connection_id=connection_id,
+                text="🔥 Спам-меню открыто!\n\nВыберите какой спам вам нужен:",
                 reply_markup=get_spam_keyboard()
             )
             return
@@ -385,15 +364,14 @@ async def handle_business_message(message: types.Message):
             
             parts = text.split()
             if len(parts) < 3:
-                await send_business_message(
+                await send_to_chat(
                     chat_id,
                     "❌ Неправильный формат\n\n"
                     "📌 .whois ip [IP] - пробив по IP\n"
                     "📌 .whois number [НОМЕР] - пробив по номеру\n\n"
                     "Примеры:\n"
                     ".whois ip 8.8.8.8\n"
-                    ".whois number 89001234567",
-                    connection_id
+                    ".whois number 89001234567"
                 )
                 return
             
@@ -403,30 +381,29 @@ async def handle_business_message(message: types.Message):
             if command_type == 'ip':
                 ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
                 if not re.match(ip_pattern, target):
-                    await send_business_message(chat_id, f"❌ Некорректный IP: {target}\n📌 Пример: 8.8.8.8", connection_id)
+                    await send_to_chat(chat_id, f"❌ Некорректный IP: {target}\n📌 Пример: 8.8.8.8")
                     return
                 
                 await delete_business_message(chat_id, message_id, connection_id)
                 result = await get_ip_info(target)
-                await send_business_message(chat_id, result['text'] if result['success'] else f"❌ Ошибка: {result['text']}", connection_id)
+                await send_to_chat(chat_id, result['text'] if result['success'] else f"❌ Ошибка: {result['text']}")
                 logger.info(f"✅ IP {target} проверен")
                 return
             
             elif command_type == 'number':
                 await delete_business_message(chat_id, message_id, connection_id)
                 result = await get_phone_info(target)
-                await send_business_message(chat_id, result['text'] if result['success'] else f"❌ Ошибка: {result['text']}", connection_id)
+                await send_to_chat(chat_id, result['text'] if result['success'] else f"❌ Ошибка: {result['text']}")
                 logger.info(f"✅ Номер {target} проверен")
                 return
             
             else:
-                await send_business_message(
+                await send_to_chat(
                     chat_id,
                     "❌ Неизвестный тип\n\n"
                     "📌 Доступные типы:\n"
                     ".whois ip [IP] - пробив по IP\n"
-                    ".whois number [НОМЕР] - пробив по номеру",
-                    connection_id
+                    ".whois number [НОМЕР] - пробив по номеру"
                 )
             return
 
@@ -436,10 +413,9 @@ async def handle_business_message(message: types.Message):
         if text.lower() == '.ping':
             logger.info("🎯 .ping")
             await delete_business_message(chat_id, message_id, connection_id)
-            await send_business_message(
+            await send_to_chat(
                 chat_id=chat_id,
-                text=f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}",
-                connection_id=connection_id
+                text=f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}"
             )
             logger.info("✅ Ответ отправлен")
             return
@@ -450,7 +426,7 @@ async def handle_business_message(message: types.Message):
         if text.lower() == '/chatid':
             logger.info("🎯 /chatid")
             await delete_business_message(chat_id, message_id, connection_id)
-            await send_business_message(
+            await send_to_chat(
                 chat_id=chat_id,
                 text=(
                     f"📊 ИНФОРМАЦИЯ О ЧАТЕ\n\n"
@@ -458,8 +434,7 @@ async def handle_business_message(message: types.Message):
                     f"📌 ТИП: {message.chat.type}\n"
                     f"👤 ТВОЙ ID: {message.from_user.id}\n"
                     f"👤 ЮЗЕР: @{message.from_user.username or 'Нет'}"
-                ),
-                connection_id=connection_id
+                )
             )
             return
 
@@ -483,15 +458,15 @@ async def start_command(message: types.Message):
         ".spams - спам-меню\n"
         ".ping - проверка\n"
         ".inf - справка\n\n"
-        "🔥 Бот удаляет команды и кеширует сообщения!"
+        "🔥 Бот отвечает ОТ СВОЕГО ИМЕНИ!"
     )
 
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info("📌 Бот удаляет команды через Business API")
-    logger.info("📌 Сообщения кешируются для отслеживания удалений")
+    logger.info("📌 Бот отвечает ОТ СВОЕГО ИМЕНИ в бизнес-чатах")
+    logger.info("📌 Команды удаляются через Business API")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
