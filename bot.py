@@ -35,30 +35,30 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ========== ФАЙЛ ДЛЯ ХРАНЕНИЯ ВЛАДЕЛЬЦЕВ ==========
-OWNERS_FILE = "owners.json"
+# ========== ФАЙЛ ДЛЯ ХРАНЕНИЯ ПОЛЬЗОВАТЕЛЕЙ ==========
+USERS_FILE = "users.json"
 
-# ========== ЗАГРУЗКА ВЛАДЕЛЬЦЕВ ==========
-def load_owners():
+# ========== ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ ==========
+def load_users():
     try:
-        if os.path.exists(OWNERS_FILE):
-            with open(OWNERS_FILE, 'r', encoding='utf-8') as f:
+        if os.path.exists(USERS_FILE):
+            with open(USERS_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         return {}
     except Exception as e:
-        logger.error(f"❌ Ошибка загрузки owners.json: {e}")
+        logger.error(f"❌ Ошибка загрузки users.json: {e}")
         return {}
 
-def save_owners(owners):
+def save_users(users):
     try:
-        with open(OWNERS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(owners, f, indent=2, ensure_ascii=False)
-        logger.info(f"✅ Владельцы сохранены: {len(owners)} записей")
+        with open(USERS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(users, f, indent=2, ensure_ascii=False)
+        logger.info(f"✅ Пользователи сохранены: {len(users)} записей")
     except Exception as e:
-        logger.error(f"❌ Ошибка сохранения owners.json: {e}")
+        logger.error(f"❌ Ошибка сохранения users.json: {e}")
 
 # ========== ЗАГРУЗКА ДАННЫХ ==========
-owners_data = load_owners()  # {user_id: user_id}
+users_data = load_users()  # {user_id: {"username": "...", "first_name": "...", "connected_at": "..."}}
 
 # ========== КЕШ СООБЩЕНИЙ ==========
 message_cache = {}
@@ -188,43 +188,48 @@ async def send_to_chat(chat_id: int, text: str, reply_markup=None):
         return None
 
 # ========== ОТПРАВКА ВЛАДЕЛЬЦУ ==========
-async def send_to_owner(owner_id: int, text: str):
+async def send_to_user(user_id: int, text: str):
     try:
-        await bot.send_message(chat_id=owner_id, text=text)
-        logger.info(f"✅ Сообщение отправлено владельцу {owner_id}")
+        await bot.send_message(chat_id=user_id, text=text)
+        logger.info(f"✅ Сообщение отправлено пользователю {user_id}")
         return True
     except Exception as e:
-        logger.error(f"❌ Ошибка отправки владельцу: {e}")
+        logger.error(f"❌ Ошибка отправки пользователю: {e}")
         return False
 
 # ========== ОБРАБОТЧИК ПОДКЛЮЧЕНИЯ ==========
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
     if connection.user:
-        owner_id = connection.user.id
-        owner_username = connection.user.username or "Нет юзернейма"
+        user_id = connection.user.id
+        username = connection.user.username or "Нет юзернейма"
+        first_name = connection.user.first_name or "Неизвестно"
         
         logger.info("=" * 60)
         logger.info("🔗 ПОДКЛЮЧЕНИЕ К БИЗНЕС-АККАУНТУ!")
         logger.info(f"📌 ID подключения: {connection.id}")
-        logger.info(f"👤 ВЛАДЕЛЕЦ: @{owner_username} (ID: {owner_id})")
+        logger.info(f"👤 ПОЛЬЗОВАТЕЛЬ: @{username} (ID: {user_id})")
         logger.info("=" * 60)
         
-        # Сохраняем владельца
-        owners_data[str(owner_id)] = owner_id
-        save_owners(owners_data)
+        # Сохраняем пользователя
+        users_data[str(user_id)] = {
+            "username": username,
+            "first_name": first_name,
+            "connected_at": datetime.now().strftime('%d.%m.%Y %H:%M:%S')
+        }
+        save_users(users_data)
         
         # Отправляем приветствие
-        await send_to_owner(
-            owner_id,
+        await send_to_user(
+            user_id,
             f"✅ БОТ АКТИВЕН!\n\n"
-            f"👤 Вы подключены как владелец бизнес-аккаунта.\n"
-            f"🆔 Ваш ID: {owner_id}\n"
-            f"📌 Команды работают только для вас!\n\n"
+            f"👤 Вы подключены к боту!\n"
+            f"🆔 Ваш ID: {user_id}\n"
+            f"📌 Команды работают для вас!\n\n"
             f"🔥 Введите .inf для справки."
         )
     else:
-        logger.warning("⚠️ Не удалось определить владельца!")
+        logger.warning("⚠️ Не удалось определить пользователя!")
 
 # ========== ОБРАБОТЧИК НАЖАТИЯ КНОПОК ==========
 @dp.callback_query()
@@ -286,11 +291,10 @@ async def handle_business_message(message: types.Message):
         connection_id = message.business_connection_id
 
         # ============================================================
-        # ПРОВЕРКА: ЯВЛЯЕТСЯ ЛИ ПОЛЬЗОВАТЕЛЬ ВЛАДЕЛЬЦЕМ?
+        # ПРОВЕРКА: ЕСТЬ ЛИ ПОЛЬЗОВАТЕЛЬ В users.json?
         # ============================================================
-        # Проверяем, есть ли пользователь в owners.json
-        if str(user_id) not in owners_data:
-            logger.info(f"⛔ ИГНОР: @{message.from_user.username} (не владелец, нет в owners.json)")
+        if str(user_id) not in users_data:
+            logger.info(f"⛔ ИГНОР: @{message.from_user.username} (нет в users.json)")
             return
 
         if not message.text:
@@ -507,8 +511,8 @@ async def start_command(message: types.Message):
         "📌 Введи .inf для справки\n\n"
         "📌 КАК ЭТО РАБОТАЕТ:\n"
         "1. Подключи бота через Telegram Business\n"
-        "2. Бот запомнит тебя как владельца\n"
-        "3. Команды работают ТОЛЬКО для владельцев\n\n"
+        "2. Бот запомнит тебя в users.json\n"
+        "3. Команды работают ТОЛЬКО для подключенных пользователей\n\n"
         "📌 КОМАНДЫ:\n"
         ".whois ip [IP] - пробив по IP\n"
         ".whois number [НОМЕР] - пробив по номеру\n"
@@ -521,9 +525,9 @@ async def start_command(message: types.Message):
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
-    logger.info("🔥 МНОГОПОЛЬЗОВАТЕЛЬСКИЙ БОТ ЗАПУЩЕН!")
-    logger.info(f"📌 Загружено владельцев: {len(owners_data)}")
-    logger.info("📌 Команды работают только для владельцев из owners.json")
+    logger.info("🔥 БОТ ЗАПУЩЕН!")
+    logger.info(f"📌 Загружено пользователей: {len(users_data)}")
+    logger.info("📌 Команды работают только для пользователей из users.json")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
