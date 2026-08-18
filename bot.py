@@ -8,7 +8,7 @@ import random
 import json
 import phonenumbers
 from phonenumbers import carrier, geocoder, timezone
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
@@ -35,9 +35,11 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ========== ФАЙЛ ДЛЯ ХРАНЕНИЯ ПОЛЬЗОВАТЕЛЕЙ ==========
+# ========== ФАЙЛЫ ==========
 USERS_FILE = "users.json"
+STATS_FILE = "stats.json"
 
+# ========== ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ ==========
 def load_users():
     try:
         if os.path.exists(USERS_FILE):
@@ -56,9 +58,38 @@ def save_users(users):
     except Exception as e:
         logger.error(f"❌ Ошибка сохранения users.json: {e}")
 
+# ========== СТАТИСТИКА ==========
+def load_stats():
+    try:
+        if os.path.exists(STATS_FILE):
+            with open(STATS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return {"total_commands": 0, "total_connections": 0, "users": {}}
+    except Exception as e:
+        logger.error(f"❌ Ошибка загрузки stats.json: {e}")
+        return {"total_commands": 0, "total_connections": 0, "users": {}}
+
+def save_stats(stats):
+    try:
+        with open(STATS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(stats, f, indent=2, ensure_ascii=False)
+        logger.info(f"✅ Статистика сохранена")
+    except Exception as e:
+        logger.error(f"❌ Ошибка сохранения stats.json: {e}")
+
 users_data = load_users()
+stats_data = load_stats()
 message_cache = {}
 
+# ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+def get_msk_time():
+    """Возвращает текущее время по МСК"""
+    return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
+
+def get_msk_time_short():
+    return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m %H:%M')
+
+# ========== КЛАВИАТУРА ==========
 def get_spam_keyboard():
     buttons = [
         [InlineKeyboardButton(text="🔥 Троллинг спам", callback_data="spam_troll")],
@@ -80,6 +111,7 @@ INSULTS = [
     "Ты такой никчемный, что даже интернет тебя не хочет!"
 ]
 
+# ========== ПРОБИВ IP ==========
 async def get_ip_info(ip: str):
     try:
         response = requests.get(
@@ -111,6 +143,7 @@ async def get_ip_info(ip: str):
     except Exception as e:
         return {'success': False, 'text': f"❌ Ошибка: {str(e)}"}
 
+# ========== ПРОБИВ НОМЕРА ==========
 async def get_phone_info(phone: str):
     try:
         phone_clean = phone.replace('+', '').replace('-', '').replace('(', '').replace(')', '').replace(' ', '')
@@ -146,6 +179,7 @@ async def get_phone_info(phone: str):
     except Exception as e:
         return {'success': False, 'text': f"❌ Ошибка: {str(e)}"}
 
+# ========== УДАЛЕНИЕ ==========
 async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
     try:
         url = f'https://api.telegram.org/bot{BOT_TOKEN}/deleteBusinessMessages'
@@ -166,9 +200,8 @@ async def delete_business_message(chat_id: int, message_id: int, connection_id: 
         logger.warning(f"⚠️ Не удалось удалить через Business API: {e}")
         return False
 
-# ========== ОТПРАВКА В ОБЩИЙ ЧАТ (С BUSINESS_CONNECTION_ID) ==========
+# ========== ОТПРАВКА ==========
 async def send_to_chat(chat_id: int, text: str, connection_id: str, reply_markup=None):
-    """Отправляет сообщение В ОБЩИЙ ЧАТ от имени владельца бизнес-аккаунта"""
     try:
         return await bot.send_message(
             chat_id=chat_id,
@@ -180,39 +213,52 @@ async def send_to_chat(chat_id: int, text: str, connection_id: str, reply_markup
         logger.error(f"❌ Ошибка отправки: {e}")
         return None
 
-# ========== ОБРАБОТЧИК ПОДКЛЮЧЕНИЯ ==========
+# ========== ПОДКЛЮЧЕНИЕ ==========
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
     if connection.user:
         user_id = connection.user.id
         username = connection.user.username or "Нет юзернейма"
         first_name = connection.user.first_name or "Неизвестно"
+        now = get_msk_time()
         
         logger.info("=" * 60)
         logger.info("🔗 ПОДКЛЮЧЕНИЕ К БИЗНЕС-АККАУНТУ!")
         logger.info(f"📌 ID подключения: {connection.id}")
         logger.info(f"👤 ПОЛЬЗОВАТЕЛЬ: @{username} (ID: {user_id})")
+        logger.info(f"🕐 ВРЕМЯ: {now}")
         logger.info("=" * 60)
         
+        # Обновляем статистику подключений
+        stats_data["total_connections"] += 1
+        if str(user_id) not in stats_data["users"]:
+            stats_data["users"][str(user_id)] = {"commands": 0}
+        
+        # Сохраняем пользователя
         users_data[str(user_id)] = {
             "username": username,
             "first_name": first_name,
-            "connected_at": datetime.now().strftime('%d.%m.%Y %H:%M:%S')
+            "connected_at": now,
+            "last_active": now,
+            "connection_id": connection.id
         }
         save_users(users_data)
+        save_stats(stats_data)
         
+        # Отправляем приветствие
         await bot.send_message(
             chat_id=user_id,
             text=f"✅ БОТ АКТИВЕН!\n\n"
                  f"👤 Вы подключены к боту!\n"
                  f"🆔 Ваш ID: {user_id}\n"
+                 f"🕐 Время: {now} (МСК)\n"
                  f"📌 Команды работают для вас!\n\n"
                  f"🔥 Введите .inf для справки."
         )
     else:
         logger.warning("⚠️ Не удалось определить пользователя!")
 
-# ========== ОБРАБОТЧИК НАЖАТИЯ КНОПОК ==========
+# ========== КНОПКИ ==========
 @dp.callback_query()
 async def handle_callback(callback: types.CallbackQuery):
     try:
@@ -274,7 +320,7 @@ async def handle_business_message(message: types.Message):
         chat_id = message.chat.id
         connection_id = message.business_connection_id
 
-        # ПРОВЕРКА: ЕСТЬ ЛИ ПОЛЬЗОВАТЕЛЬ В users.json?
+        # Проверка: есть ли пользователь в users.json?
         if str(user_id) not in users_data:
             logger.info(f"⛔ ИГНОР: @{message.from_user.username} (нет в users.json)")
             return
@@ -285,11 +331,19 @@ async def handle_business_message(message: types.Message):
         text = message.text
         message_id = message.message_id
 
+        # Обновляем время последней активности
+        users_data[str(user_id)]["last_active"] = get_msk_time()
+        save_users(users_data)
+
         # ============================================================
         # .inf
         # ============================================================
         if text.lower() == '.inf':
             logger.info("🎯 .inf")
+            stats_data["total_commands"] += 1
+            stats_data["users"][str(user_id)]["commands"] += 1
+            save_stats(stats_data)
+            
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_chat(
                 chat_id=chat_id,
@@ -319,6 +373,10 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         if text.lower().startswith('.spam') and not text.lower().startswith('.spams'):
             logger.info("🎯 .spam")
+            
+            stats_data["total_commands"] += 1
+            stats_data["users"][str(user_id)]["commands"] += 1
+            save_stats(stats_data)
             
             parts = text.split(maxsplit=2)
             
@@ -382,6 +440,10 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         if text.lower() == '.spams':
             logger.info("🎯 .spams")
+            stats_data["total_commands"] += 1
+            stats_data["users"][str(user_id)]["commands"] += 1
+            save_stats(stats_data)
+            
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_chat(
                 chat_id=chat_id,
@@ -396,6 +458,9 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         if text.lower().startswith('.whois'):
             logger.info("🎯 .whois")
+            stats_data["total_commands"] += 1
+            stats_data["users"][str(user_id)]["commands"] += 1
+            save_stats(stats_data)
             
             parts = text.split()
             if len(parts) < 3:
@@ -449,6 +514,10 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         if text.lower() == '.ping':
             logger.info("🎯 .ping")
+            stats_data["total_commands"] += 1
+            stats_data["users"][str(user_id)]["commands"] += 1
+            save_stats(stats_data)
+            
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_chat(
                 chat_id=chat_id,
@@ -463,6 +532,10 @@ async def handle_business_message(message: types.Message):
         # ============================================================
         if text.lower() == '/chatid':
             logger.info("🎯 /chatid")
+            stats_data["total_commands"] += 1
+            stats_data["users"][str(user_id)]["commands"] += 1
+            save_stats(stats_data)
+            
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_chat(
                 chat_id=chat_id,
@@ -499,11 +572,13 @@ async def start_command(message: types.Message):
         ".inf - справка"
     )
 
+# ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
     logger.info(f"📌 Загружено пользователей: {len(users_data)}")
-    logger.info("📌 Бот отправляет сообщения В ОБЩИЙ ЧАТ (business_connection_id)")
+    logger.info(f"📌 Всего команд: {stats_data['total_commands']}")
+    logger.info("📌 Время: {get_msk_time()} (МСК)")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
