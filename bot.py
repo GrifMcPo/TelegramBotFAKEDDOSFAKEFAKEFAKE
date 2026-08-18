@@ -13,6 +13,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types.business_connection import BusinessConnection
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types.business_messages_deleted import BusinessMessagesDeleted
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,22 +36,8 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ========== ХРАНИЛИЩЕ ==========
-muted_chats = {}
-
-# ========== ОСКОРБЛЕНИЯ ==========
-INSULTS = [
-    "хахах что ты пидорасина в себя поверил?",
-    "Сколько твоя мамка в час берет? или бесплатно ха-ха",
-    "Что ты плакать мамульке побежишь?",
-    "Ты же как ныть нихуя не умеешь пидорас толстый",
-    "ной ной своей мамке ты просто не знаешь что я ее ебал",
-    "Ты такой жалкий, что даже бомжи тебя жалеют!",
-    "Твоя мамаша настолько толстая, что у нее свой гравитационный пояс!",
-    "Ты настолько тупой, что даже 2+2 не можешь посчитать!",
-    "Твой папаша настолько ленивый, что даже дышит через раз!",
-    "Ты такой никчемный, что даже интернет тебя не хочет!"
-]
+# ========== ХРАНИЛИЩЕ ПОСЛЕДНИХ СООБЩЕНИЙ ==========
+last_messages = {}  # {chat_id: {message_id: (text, from_user)}}
 
 # ========== КЛАВИАТУРА ==========
 def get_spam_keyboard():
@@ -131,7 +118,6 @@ async def get_phone_info(phone: str):
 
 # ========== УДАЛЕНИЕ ЧЕРЕЗ ПРЯМОЙ API-ЗАПРОС ==========
 async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
-    """Удаляет сообщение через прямой API-запрос к Telegram"""
     try:
         url = f'https://api.telegram.org/bot{BOT_TOKEN}/deleteBusinessMessages'
         payload = {
@@ -179,6 +165,61 @@ async def handle_business_connection(connection: BusinessConnection):
     logger.info(f"📌 ID подключения: {connection.id}")
     logger.info(f"📌 Пользователь: @{connection.user.username if connection.user else 'Нет'}")
     logger.info("=" * 60)
+
+# ========== ОБРАБОТЧИК УДАЛЕННЫХ СООБЩЕНИЙ ==========
+@dp.business_messages_deleted()
+async def handle_business_messages_deleted(event: BusinessMessagesDeleted):
+    try:
+        chat_id = event.chat_id
+        message_ids = event.message_ids
+        
+        logger.info("=" * 60)
+        logger.info("🗑️ ОБНАРУЖЕНЫ УДАЛЕННЫЕ СООБЩЕНИЯ")
+        logger.info(f"📌 ID ЧАТА: {chat_id}")
+        logger.info(f"📌 КОЛИЧЕСТВО: {len(message_ids)}")
+        logger.info("=" * 60)
+        
+        # Получаем информацию о чате
+        try:
+            chat = await bot.get_chat(chat_id)
+            chat_username = chat.username or "Неизвестно"
+            chat_title = chat.title or "Личный чат"
+        except:
+            chat_username = "Неизвестно"
+            chat_title = "Личный чат"
+        
+        # Для каждого удаленного сообщения
+        for msg_id in message_ids:
+            # Пытаемся найти сообщение в кеше
+            if chat_id in last_messages and msg_id in last_messages[chat_id]:
+                msg_text, from_user = last_messages[chat_id][msg_id]
+                
+                # Формируем отчет
+                report = (
+                    f"⚠️ ЗАФИКСИРОВАНО УДАЛЕННОЕ СООБЩЕНИЕ!\n\n"
+                    f"🆔 ID ЧАТА: {chat_id}\n"
+                    f"👤 С КЕМ В ЧАТЕ: @{from_user or 'Неизвестно'}\n"
+                    f"📝 ЧАТ: {chat_title}\n\n"
+                    f"📩 СООБЩЕНИЕ КОТОРОЕ УДАЛИЛИ:\n"
+                    f"────────────────────\n"
+                    f"{msg_text if msg_text else '[Медиафайл]'}\n"
+                    f"────────────────────\n\n"
+                    f"🕐 ВРЕМЯ УДАЛЕНИЯ: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
+                )
+                
+                # Отправляем в ЛС админу
+                try:
+                    await bot.send_message(chat_id=ADMIN_ID, text=report)
+                    logger.info(f"✅ Отчет об удалении отправлен админу")
+                except Exception as e:
+                    logger.error(f"❌ Ошибка отправки отчета: {e}")
+            else:
+                logger.info(f"⚠️ Сообщение {msg_id} не найдено в кеше")
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка в handle_business_messages_deleted: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
 
 # ========== ОБРАБОТЧИК НАЖАТИЯ КНОПОК ==========
 @dp.callback_query()
@@ -238,12 +279,39 @@ async def handle_business_message(message: types.Message):
         logger.info("=" * 60)
 
         if not message.text:
+            # Сохраняем медиа в кеш
+            chat_id = message.chat.id
+            msg_id = message.message_id
+            from_user = message.from_user.username or "Неизвестно"
+            
+            if chat_id not in last_messages:
+                last_messages[chat_id] = {}
+            last_messages[chat_id][msg_id] = ("[Медиафайл]", from_user)
+            
+            # Ограничиваем кеш
+            if len(last_messages[chat_id]) > 100:
+                oldest = min(last_messages[chat_id].keys())
+                del last_messages[chat_id][oldest]
+            
             return
 
         text = message.text
         chat_id = message.chat.id
         message_id = message.message_id
         connection_id = message.business_connection_id
+        from_user = message.from_user.username or "Неизвестно"
+
+        # ============================================================
+        # СОХРАНЯЕМ СООБЩЕНИЕ В КЕШ
+        # ============================================================
+        if chat_id not in last_messages:
+            last_messages[chat_id] = {}
+        last_messages[chat_id][message_id] = (text, from_user)
+        
+        # Ограничиваем кеш (максимум 100 сообщений на чат)
+        if len(last_messages[chat_id]) > 100:
+            oldest = min(last_messages[chat_id].keys())
+            del last_messages[chat_id][oldest]
 
         # ============================================================
         # .inf - СПРАВКА
@@ -264,10 +332,6 @@ async def handle_business_message(message: types.Message):
                     "> .whois ip [IP] - Пробив по IP-адресу\n"
                     "> .whois number [НОМЕР] - Пробив по номеру телефона\n\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    "🔇 МУТ\n\n"
-                    "> .mute - Включить мут\n"
-                    "> .unmute - Выключить мут\n\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     "🔥 СПАМ\n\n"
                     "> .spam [Кол-во] [Текст] - Спам вашим сообщением\n"
                     "> .spams - Открыть спам-меню\n\n"
@@ -278,54 +342,6 @@ async def handle_business_message(message: types.Message):
                 ),
                 connection_id=connection_id
             )
-            return
-
-        # ============================================================
-        # .mute - ВКЛЮЧИТЬ МУТ
-        # ============================================================
-        if text.lower() == '.mute':
-            logger.info("🎯 .mute")
-            
-            await delete_business_message(chat_id, message_id, connection_id)
-            
-            muted_chats[chat_id] = True
-            
-            await send_business_message(
-                chat_id=chat_id,
-                text=(
-                    "🔇 Мут включен!\n\n"
-                    "📌 Собеседник теперь не может писать в этот чат.\n"
-                    "📌 Все его сообщения будут удаляться.\n"
-                    "📌 Для выключения напишите .unmute"
-                ),
-                connection_id=connection_id
-            )
-            
-            logger.info(f"✅ Мут включен в чате {chat_id}")
-            return
-
-        # ============================================================
-        # .unmute - ВЫКЛЮЧИТЬ МУТ
-        # ============================================================
-        if text.lower() == '.unmute':
-            logger.info("🎯 .unmute")
-            
-            await delete_business_message(chat_id, message_id, connection_id)
-            
-            if chat_id in muted_chats:
-                del muted_chats[chat_id]
-            
-            await send_business_message(
-                chat_id=chat_id,
-                text=(
-                    "🔊 Мут выключен!\n\n"
-                    "📌 Собеседник снова может писать в чат.\n"
-                    "📌 Его сообщения больше не будут удаляться."
-                ),
-                connection_id=connection_id
-            )
-            
-            logger.info(f"✅ Мут выключен в чате {chat_id}")
             return
 
         # ============================================================
@@ -503,20 +519,6 @@ async def handle_business_message(message: types.Message):
             )
             return
 
-        # ============================================================
-        # ЕСЛИ ВКЛЮЧЕН МУТ — УДАЛЯЕМ ВСЕ СООБЩЕНИЯ СОБЕСЕДНИКА
-        # ============================================================
-        if chat_id in muted_chats:
-            if message.from_user.id == (await bot.get_me()).id:
-                return
-            
-            if text.startswith('.'):
-                return
-            
-            await delete_business_message(chat_id, message_id, connection_id)
-            logger.info(f"🗑️ Удалено сообщение собеседника в замученном чате {chat_id}")
-            return
-
         logger.info(f"⏭️ НЕ РАСПОЗНАНА: {text}")
 
     except Exception as e:
@@ -533,21 +535,19 @@ async def start_command(message: types.Message):
         "📌 КОМАНДЫ:\n"
         ".whois ip [IP] - пробив по IP\n"
         ".whois number [НОМЕР] - пробив по номеру\n"
-        ".mute - включить мут\n"
-        ".unmute - выключить мут\n"
         ".spam [Кол-во] [Текст] - спам\n"
         ".spams - спам-меню\n"
         ".ping - проверка\n"
         ".inf - справка\n\n"
-        "🔥 Бот УДАЛЯЕТ команды через Business API!"
+        "🔥 Бот отслеживает УДАЛЕННЫЕ сообщения!"
     )
 
 # ========== ЗАПУСК ==========
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info("📌 Бот использует deleteBusinessMessages через прямой API")
-    logger.info("📌 Команды УДАЛЯЮТСЯ!")
+    logger.info("📌 Бот отслеживает удаленные сообщения")
+    logger.info("📌 Отчеты приходят в ЛС админу")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
