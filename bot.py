@@ -62,7 +62,6 @@ INSULTS = [
 ]
 
 # ========== ВЛАДЕЛЕЦ БИЗНЕС-АККАУНТА ==========
-# ID пользователя, которому принадлежит бизнес-аккаунт
 BUSINESS_OWNER_ID = 8857252828  # ТВОЙ ID
 
 # ========== ФУНКЦИЯ ДЛЯ ПРОБИВА IP ==========
@@ -240,14 +239,17 @@ async def handle_business_message(message: types.Message):
         logger.info("=" * 60)
 
         # ============================================================
-        # ПРОВЕРКА: КОМАНДЫ РАБОТАЮТ ТОЛЬКО ДЛЯ ВЛАДЕЛЬЦА!
+        # ПРОВЕРКА: ЕСЛИ НЕ ВЛАДЕЛЕЦ — ПОЛНОСТЬЮ ИГНОРИРУЕМ!
         # ============================================================
         if message.from_user.id != BUSINESS_OWNER_ID:
-            logger.info(f"⏭️ ИГНОР: команда от @{message.from_user.username} (не владелец)")
-            # Можем отправить владельцу уведомление, что кто-то пытался использовать бота
+            logger.info(f"⛔ ИГНОР: сообщение от @{message.from_user.username} (не владелец)")
+            # Отправляем уведомление владельцу
             await send_to_owner(
-                f"⚠️ @{message.from_user.username} (ID: {message.from_user.id}) попытался использовать бота в чате {message.chat.id}\n\nТекст: {message.text}"
+                f"⚠️ @{message.from_user.username} (ID: {message.from_user.id}) пытался использовать бота.\n\n"
+                f"📝 Текст: {message.text}\n"
+                f"🆔 Чат: {message.chat.id}"
             )
+            # ВОЗВРАЩАЕМСЯ — НИЧЕГО НЕ ДЕЛАЕМ!
             return
 
         chat_id = message.chat.id
@@ -478,8 +480,9 @@ async def start_command(message: types.Message):
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
-    logger.info(f"👤 ВЛАДЕЛЕЦ БИЗНЕС-АККАУНТА: {BUSINESS_OWNER_ID}")
+    logger.info(f"👤 ВЛАДЕЛЕЦ: {BUSINESS_OWNER_ID}")
     logger.info("📌 Команды работают ТОЛЬКО для владельца!")
+    logger.info("📌 Чужие команды ПОЛНОСТЬЮ игнорируются!")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
