@@ -58,7 +58,7 @@ def save_users(users):
         logger.error(f"❌ Ошибка сохранения users.json: {e}")
 
 # ========== ЗАГРУЗКА ДАННЫХ ==========
-users_data = load_users()  # {user_id: {"username": "...", "first_name": "...", "connected_at": "..."}}
+users_data = load_users()
 
 # ========== КЕШ СООБЩЕНИЙ ==========
 message_cache = {}
@@ -175,8 +175,9 @@ async def delete_business_message(chat_id: int, message_id: int, connection_id: 
         logger.warning(f"⚠️ Не удалось удалить через Business API: {e}")
         return False
 
-# ========== ОТПРАВКА В ЧАТ ==========
+# ========== ОТПРАВКА В ТОТ ЖЕ ЧАТ (ОТ ИМЕНИ БОТА) ==========
 async def send_to_chat(chat_id: int, text: str, reply_markup=None):
+    """Отправляет сообщение в указанный чат от имени бота"""
     try:
         return await bot.send_message(
             chat_id=chat_id,
@@ -186,16 +187,6 @@ async def send_to_chat(chat_id: int, text: str, reply_markup=None):
     except Exception as e:
         logger.error(f"❌ Ошибка отправки в чат {chat_id}: {e}")
         return None
-
-# ========== ОТПРАВКА ВЛАДЕЛЬЦУ ==========
-async def send_to_user(user_id: int, text: str):
-    try:
-        await bot.send_message(chat_id=user_id, text=text)
-        logger.info(f"✅ Сообщение отправлено пользователю {user_id}")
-        return True
-    except Exception as e:
-        logger.error(f"❌ Ошибка отправки пользователю: {e}")
-        return False
 
 # ========== ОБРАБОТЧИК ПОДКЛЮЧЕНИЯ ==========
 @dp.business_connection()
@@ -211,7 +202,6 @@ async def handle_business_connection(connection: BusinessConnection):
         logger.info(f"👤 ПОЛЬЗОВАТЕЛЬ: @{username} (ID: {user_id})")
         logger.info("=" * 60)
         
-        # Сохраняем пользователя
         users_data[str(user_id)] = {
             "username": username,
             "first_name": first_name,
@@ -219,8 +209,7 @@ async def handle_business_connection(connection: BusinessConnection):
         }
         save_users(users_data)
         
-        # Отправляем приветствие
-        await send_to_user(
+        await send_to_chat(
             user_id,
             f"✅ БОТ АКТИВЕН!\n\n"
             f"👤 Вы подключены к боту!\n"
@@ -302,18 +291,6 @@ async def handle_business_message(message: types.Message):
 
         text = message.text
         message_id = message.message_id
-        from_user = message.from_user.username or "Неизвестно"
-
-        # ============================================================
-        # СОХРАНЯЕМ В КЕШ
-        # ============================================================
-        cache_key = f"{chat_id}_{message_id}"
-        msg_text = message.text or "[Медиафайл]"
-        message_cache[cache_key] = (msg_text, from_user, message.date)
-        
-        if len(message_cache) > 500:
-            oldest = min(message_cache.keys())
-            del message_cache[oldest]
 
         # ============================================================
         # .inf - СПРАВКА
@@ -509,10 +486,6 @@ async def start_command(message: types.Message):
     await message.answer(
         "🤖 БОТ ДЛЯ БИЗНЕС-ЧАТОВ\n\n"
         "📌 Введи .inf для справки\n\n"
-        "📌 КАК ЭТО РАБОТАЕТ:\n"
-        "1. Подключи бота через Telegram Business\n"
-        "2. Бот запомнит тебя в users.json\n"
-        "3. Команды работают ТОЛЬКО для подключенных пользователей\n\n"
         "📌 КОМАНДЫ:\n"
         ".whois ip [IP] - пробив по IP\n"
         ".whois number [НОМЕР] - пробив по номеру\n"
@@ -527,7 +500,7 @@ async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
     logger.info(f"📌 Загружено пользователей: {len(users_data)}")
-    logger.info("📌 Команды работают только для пользователей из users.json")
+    logger.info("📌 Бот отвечает В ТОТ ЖЕ ЧАТ, где была команда")
     logger.info("=" * 60)
     await dp.start_polling(bot)
 
