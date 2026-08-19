@@ -289,12 +289,11 @@ async def send_to_chat(chat_id: int, text: str, connection_id: str, reply_markup
         return None
 
 # =====================================================================
-# ОБРАБОТЧИК ВСЕХ ОБНОВЛЕНИЙ (ДЛЯ BUSINESS CONNECTION)
+# ОБРАБОТЧИК ВСЕХ ОБНОВЛЕНИЙ
 # =====================================================================
 @dp.update()
 async def handle_all_updates(update: types.Update):
     try:
-        # Обработка business_connection
         if update.business_connection:
             connection = update.business_connection
             if connection.user:
@@ -335,7 +334,6 @@ async def handle_all_updates(update: types.Update):
                 )
             return
 
-        # Обработка business_message
         if update.business_message:
             message = update.business_message
             await handle_business_message(message)
@@ -343,8 +341,6 @@ async def handle_all_updates(update: types.Update):
 
     except Exception as e:
         logger.error(f"❌ Ошибка в handle_all_updates: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
 
 # =====================================================================
 # ОБРАБОТЧИК БИЗНЕС-СООБЩЕНИЙ
@@ -705,7 +701,7 @@ async def handle_callback(callback: types.CallbackQuery):
         logger.error(traceback.format_exc())
 
 # =====================================================================
-# ЗАПУСК
+# ЗАПУСК С АВТОУБИЙСТВОМ КОНФЛИКТОВ
 # =====================================================================
 async def main():
     logger.info("=" * 60)
@@ -719,15 +715,18 @@ async def main():
         logger.warning("📌 GitHub API: ОТКЛЮЧЕН (данные только локально)")
     logger.info("=" * 60)
     
-    try:
-        await dp.start_polling(bot)
-    except Exception as e:
-        if "Conflict" in str(e):
-            logger.error("❌ КОНФЛИКТ: Бот уже запущен в другом месте!")
-            logger.info("⏹️ Останавливаем этот экземпляр...")
-            sys.exit(0)
-        else:
-            raise
+    # Запускаем бота с автоматическим переподключением при конфликте
+    while True:
+        try:
+            await dp.start_polling(bot)
+        except Exception as e:
+            if "Conflict" in str(e):
+                logger.warning("⚠️ Конфликт! Переподключаемся...")
+                # Ждём 5 секунд и пробуем снова
+                await asyncio.sleep(5)
+                continue
+            else:
+                raise
 
 if __name__ == "__main__":
     try:
