@@ -14,7 +14,6 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram import F
 
 # ========== ЗАТКИВАЕМ ЛОГИ ==========
 logging.basicConfig(
@@ -70,13 +69,10 @@ def get_file_from_github(filename):
             content = base64.b64decode(data['content']).decode('utf-8')
             return json.loads(content), data['sha']
         elif response.status_code == 404:
-            logger.info(f"📄 Файл {filename} не найден")
             return None, None
         else:
-            logger.error(f"❌ Ошибка получения {filename}: {response.status_code}")
             return None, None
-    except Exception as e:
-        logger.error(f"❌ Ошибка: {e}")
+    except:
         return None, None
 
 def save_file_to_github(filename, data, message):
@@ -94,29 +90,20 @@ def save_file_to_github(filename, data, message):
         if sha:
             payload['sha'] = sha
         response = requests.put(url, headers=headers, json=payload)
-        if response.status_code in [200, 201]:
-            logger.info(f"✅ Файл {filename} сохранен")
-            return True
-        else:
-            logger.error(f"❌ Ошибка сохранения {filename}: {response.status_code}")
-            return False
-    except Exception as e:
-        logger.error(f"❌ Ошибка: {e}")
+        return response.status_code in [200, 201]
+    except:
         return False
 
 def load_data():
     users_data = {}
     stats_data = {"total_commands": 0, "total_connections": 0, "users": {}}
     if GITHUB_TOKEN:
-        logger.info("📥 Загрузка данных из GitHub...")
         users, _ = get_file_from_github(FILES["users"])
         if users:
             users_data = users
-            logger.info(f"✅ Загружено {len(users_data)} пользователей")
         stats, _ = get_file_from_github(FILES["stats"])
         if stats:
             stats_data = stats
-            logger.info(f"✅ Загружена статистика: {stats_data.get('total_commands', 0)} команд")
     return users_data, stats_data
 
 def save_data(users_data, stats_data, message="📊 Update"):
@@ -207,9 +194,7 @@ async def delete_business_message(chat_id: int, message_id: int, connection_id: 
         url = f'https://api.telegram.org/bot{BOT_TOKEN}/deleteBusinessMessages'
         payload = {"business_connection_id": connection_id, "message_ids": [message_id]}
         response = requests.post(url, json=payload, timeout=10)
-        if response.json().get('ok'):
-            return True
-        return False
+        return response.json().get('ok', False)
     except:
         return False
 
@@ -226,9 +211,57 @@ async def send_to_chat(chat_id: int, text: str, connection_id: str, reply_markup
         return None
 
 # =====================================================================
-# ОСНОВНОЙ ОБРАБОТЧИК BUSINESS MESSAGE (ВОТ ЭТОТ РАБОТАЕТ!)
+# ОДИН ОБРАБОТЧИК НА ВСЁ! (ЛОВИТ ВСЕ ОБНОВЛЕНИЯ)
 # =====================================================================
-@dp.business_message()
+@dp.update()
+async def handle_all_updates(update: types.Update):
+    try:
+        # ============================================================
+        # ПОДКЛЮЧЕНИЕ К БИЗНЕС-АККАУНТУ
+        # ============================================================
+        if hasattr(update, 'business_connection') and update.business_connection:
+            connection = update.business_connection
+            if connection.user:
+                user_id = connection.user.id
+                username = connection.user.username or "Нет юзернейма"
+                now = get_msk_time()
+                
+                logger.info(f"🔗 @{username} (ID: {user_id})")
+                
+                stats_data["total_connections"] += 1
+                if str(user_id) not in stats_data["users"]:
+                    stats_data["users"][str(user_id)] = {"commands": 0}
+                
+                users_data[str(user_id)] = {
+                    "username": username,
+                    "first_name": connection.user.first_name or "Неизвестно",
+                    "connected_at": now,
+                    "last_active": now,
+                    "connection_id": connection.id
+                }
+                
+                save_data(users_data, stats_data, f"🔗 New: @{username}")
+                
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=f"✅ БОТ АКТИВЕН!\n🆔 {user_id}\n🕐 {now} (МСК)\n🔥 .inf для справки"
+                )
+            return
+
+        # ============================================================
+        # СООБЩЕНИЕ ИЗ БИЗНЕС-ЧАТА
+        # ============================================================
+        if hasattr(update, 'business_message') and update.business_message:
+            message = update.business_message
+            await handle_business_message(message)
+            return
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка в handle_all_updates: {e}")
+
+# =====================================================================
+# ОБРАБОТЧИК БИЗНЕС-СООБЩЕНИЙ
+# =====================================================================
 async def handle_business_message(message: types.Message):
     try:
         logger.info(f"📩 {message.from_user.username}: {message.text}")
@@ -238,7 +271,7 @@ async def handle_business_message(message: types.Message):
         connection_id = message.business_connection_id
 
         if str(user_id) not in users_data:
-            logger.info(f"⛔ ИГНОР: {message.from_user.username} (нет в users.json)")
+            logger.info(f"⛔ ИГНОР: {message.from_user.username}")
             return
 
         if not message.text:
@@ -358,32 +391,6 @@ async def handle_business_message(message: types.Message):
 
     except Exception as e:
         logger.error(f"❌ ОШИБКА: {e}")
-
-# =====================================================================
-# BUSINESS CONNECTION
-# =====================================================================
-@dp.business_connection()
-async def handle_business_connection(connection: types.BusinessConnection):
-    if connection.user:
-        user_id = connection.user.id
-        username = connection.user.username or "Нет юзернейма"
-        now = get_msk_time()
-        
-        logger.info(f"🔗 @{username} (ID: {user_id})")
-        
-        stats_data["total_connections"] += 1
-        if str(user_id) not in stats_data["users"]:
-            stats_data["users"][str(user_id)] = {"commands": 0}
-        
-        users_data[str(user_id)] = {
-            "username": username,
-            "first_name": connection.user.first_name or "Неизвестно",
-            "connected_at": now,
-            "last_active": now,
-            "connection_id": connection.id
-        }
-        
-        save_data(users_data, stats_data, f"🔗 New: @{username}")
 
 # =====================================================================
 # ОБЫЧНЫЕ СООБЩЕНИЯ (ЛИЧКА БОТА)
