@@ -6,6 +6,7 @@ import re
 import requests
 import random
 import json
+import base64
 import phonenumbers
 from phonenumbers import carrier, geocoder, timezone
 from datetime import datetime, timedelta
@@ -27,56 +28,143 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 if not BOT_TOKEN:
     logger.error("❌ Токен не найден!")
     sys.exit(1)
 
+if not GITHUB_TOKEN:
+    logger.warning("⚠️ GITHUB_TOKEN не найден! Данные будут сохраняться локально.")
+
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ========== ФАЙЛЫ ==========
-USERS_FILE = "users.json"
-STATS_FILE = "stats.json"
+# ========== НАСТРОЙКИ GITHUB ==========
+REPO_OWNER = "GrifMcPo"
+REPO_NAME = "TelegramBotFAKEDDOSFAKEFAKEFAKE"
+BRANCH = "main"
+FILES = {
+    "users": "users.json",
+    "stats": "stats.json"
+}
 
-def load_users():
+# ========== GITHUB API ФУНКЦИИ ==========
+def get_github_headers():
+    return {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+
+def get_file_from_github(filename):
     try:
-        if os.path.exists(USERS_FILE):
-            with open(USERS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {}
+        if not GITHUB_TOKEN:
+            return None, None
+            
+        url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{filename}'
+        headers = get_github_headers()
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code == 200:
+            data = response.json()
+            content = base64.b64decode(data['content']).decode('utf-8')
+            return json.loads(content), data['sha']
+        elif response.status_code == 404:
+            logger.info(f"📄 Файл {filename} не найден, будет создан новый")
+            return None, None
+        else:
+            logger.error(f"❌ Ошибка получения {filename}: {response.status_code}")
+            return None, None
     except Exception as e:
-        logger.error(f"❌ Ошибка загрузки users.json: {e}")
-        return {}
+        logger.error(f"❌ Ошибка получения {filename}: {e}")
+        return None, None
 
-def save_users(users):
+def save_file_to_github(filename, data, message):
     try:
-        with open(USERS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(users, f, indent=2, ensure_ascii=False)
-        logger.info(f"✅ Пользователи сохранены: {len(users)} записей")
+        if not GITHUB_TOKEN:
+            logger.warning("⚠️ Нет GITHUB_TOKEN, сохраняю локально")
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            return True
+            
+        url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{filename}'
+        headers = get_github_headers()
+        
+        existing, sha = get_file_from_github(filename)
+        
+        content = json.dumps(data, indent=2, ensure_ascii=False)
+        encoded = base64.b64encode(content.encode('utf-8')).decode('utf-8')
+        
+        payload = {
+            'message': message,
+            'content': encoded,
+            'branch': BRANCH
+        }
+        
+        if sha:
+            payload['sha'] = sha
+        
+        response = requests.put(url, headers=headers, json=payload)
+        
+        if response.status_code in [200, 201]:
+            logger.info(f"✅ Файл {filename} сохранен в GitHub")
+            return True
+        else:
+            logger.error(f"❌ Ошибка сохранения {filename}: {response.status_code}")
+            return False
     except Exception as e:
-        logger.error(f"❌ Ошибка сохранения users.json: {e}")
+        logger.error(f"❌ Ошибка сохранения {filename}: {e}")
+        return False
 
-def load_stats():
-    try:
-        if os.path.exists(STATS_FILE):
-            with open(STATS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {"total_commands": 0, "total_connections": 0, "users": {}}
-    except Exception as e:
-        logger.error(f"❌ Ошибка загрузки stats.json: {e}")
-        return {"total_commands": 0, "total_connections": 0, "users": {}}
+def load_data():
+    users_data = {}
+    stats_data = {"total_commands": 0, "total_connections": 0, "users": {}}
+    
+    if GITHUB_TOKEN:
+        logger.info("📥 Загрузка данных из GitHub...")
+        users, _ = get_file_from_github(FILES["users"])
+        if users:
+            users_data = users
+            logger.info(f"✅ Загружено {len(users_data)} пользователей из GitHub")
+        
+        stats, _ = get_file_from_github(FILES["stats"])
+        if stats:
+            stats_data = stats
+            logger.info(f"✅ Загружена статистика из GitHub: {stats_data.get('total_commands', 0)} команд")
+    else:
+        logger.info("📥 Загрузка данных из локальных файлов...")
+        try:
+            if os.path.exists(FILES["users"]):
+                with open(FILES["users"], 'r', encoding='utf-8') as f:
+                    users_data = json.load(f)
+                    logger.info(f"✅ Загружено {len(users_data)} пользователей из локального файла")
+        except Exception as e:
+            logger.error(f"❌ Ошибка загрузки локального users.json: {e}")
+        
+        try:
+            if os.path.exists(FILES["stats"]):
+                with open(FILES["stats"], 'r', encoding='utf-8') as f:
+                    stats_data = json.load(f)
+                    logger.info(f"✅ Загружена статистика из локального файла")
+        except Exception as e:
+            logger.error(f"❌ Ошибка загрузки локального stats.json: {e}")
+    
+    return users_data, stats_data
 
-def save_stats(stats):
-    try:
-        with open(STATS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(stats, f, indent=2, ensure_ascii=False)
-        logger.info(f"✅ Статистика сохранена")
-    except Exception as e:
-        logger.error(f"❌ Ошибка сохранения stats.json: {e}")
+def save_data(users_data, stats_data, message="📊 Update data"):
+    with open(FILES["users"], 'w', encoding='utf-8') as f:
+        json.dump(users_data, f, indent=2, ensure_ascii=False)
+    
+    with open(FILES["stats"], 'w', encoding='utf-8') as f:
+        json.dump(stats_data, f, indent=2, ensure_ascii=False)
+    
+    logger.info("✅ Данные сохранены локально")
+    
+    if GITHUB_TOKEN:
+        save_file_to_github(FILES["users"], users_data, f"📊 Update users - {get_msk_time()}")
+        save_file_to_github(FILES["stats"], stats_data, f"📊 Update stats - {get_msk_time()}")
 
-users_data = load_users()
-stats_data = load_stats()
+users_data, stats_data = load_data()
 message_cache = {}
 
 def get_msk_time():
@@ -201,9 +289,6 @@ async def send_to_chat(chat_id: int, text: str, connection_id: str, reply_markup
         logger.error(f"❌ Ошибка отправки: {e}")
         return None
 
-# =====================================================================
-# ОБРАБОТЧИК ДЛЯ БИЗНЕС-СООБЩЕНИЙ
-# =====================================================================
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
     if connection.user:
@@ -230,8 +315,8 @@ async def handle_business_connection(connection: BusinessConnection):
             "last_active": now,
             "connection_id": connection.id
         }
-        save_users(users_data)
-        save_stats(stats_data)
+        
+        save_data(users_data, stats_data, f"🔗 New connection: @{username}")
         
         await bot.send_message(
             chat_id=user_id,
@@ -271,16 +356,13 @@ async def handle_business_message(message: types.Message):
         message_id = message.message_id
 
         users_data[str(user_id)]["last_active"] = get_msk_time()
-        save_users(users_data)
+        save_data(users_data, stats_data, f"🔄 Activity: @{message.from_user.username}")
 
-        # ============================================================
-        # .inf
-        # ============================================================
         if text.lower() == '.inf':
             logger.info("🎯 .inf")
             stats_data["total_commands"] += 1
             stats_data["users"][str(user_id)]["commands"] += 1
-            save_stats(stats_data)
+            save_data(users_data, stats_data, f"📊 Command: .inf by @{message.from_user.username}")
             
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_chat(
@@ -306,15 +388,12 @@ async def handle_business_message(message: types.Message):
             )
             return
 
-        # ============================================================
-        # .spam
-        # ============================================================
         if text.lower().startswith('.spam') and not text.lower().startswith('.spams'):
             logger.info("🎯 .spam")
             
             stats_data["total_commands"] += 1
             stats_data["users"][str(user_id)]["commands"] += 1
-            save_stats(stats_data)
+            save_data(users_data, stats_data, f"📊 Command: .spam by @{message.from_user.username}")
             
             parts = text.split(maxsplit=2)
             
@@ -373,14 +452,11 @@ async def handle_business_message(message: types.Message):
             logger.info(f"✅ Спам {count} раз отправлен")
             return
 
-        # ============================================================
-        # .spams
-        # ============================================================
         if text.lower() == '.spams':
             logger.info("🎯 .spams")
             stats_data["total_commands"] += 1
             stats_data["users"][str(user_id)]["commands"] += 1
-            save_stats(stats_data)
+            save_data(users_data, stats_data, f"📊 Command: .spams by @{message.from_user.username}")
             
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_chat(
@@ -391,14 +467,11 @@ async def handle_business_message(message: types.Message):
             )
             return
 
-        # ============================================================
-        # .whois
-        # ============================================================
         if text.lower().startswith('.whois'):
             logger.info("🎯 .whois")
             stats_data["total_commands"] += 1
             stats_data["users"][str(user_id)]["commands"] += 1
-            save_stats(stats_data)
+            save_data(users_data, stats_data, f"📊 Command: .whois by @{message.from_user.username}")
             
             parts = text.split()
             if len(parts) < 3:
@@ -447,14 +520,11 @@ async def handle_business_message(message: types.Message):
                 )
             return
 
-        # ============================================================
-        # .ping
-        # ============================================================
         if text.lower() == '.ping':
             logger.info("🎯 .ping")
             stats_data["total_commands"] += 1
             stats_data["users"][str(user_id)]["commands"] += 1
-            save_stats(stats_data)
+            save_data(users_data, stats_data, f"📊 Command: .ping by @{message.from_user.username}")
             
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_chat(
@@ -465,14 +535,11 @@ async def handle_business_message(message: types.Message):
             logger.info("✅ Ответ отправлен")
             return
 
-        # ============================================================
-        # /chatid
-        # ============================================================
         if text.lower() == '/chatid':
             logger.info("🎯 /chatid")
             stats_data["total_commands"] += 1
             stats_data["users"][str(user_id)]["commands"] += 1
-            save_stats(stats_data)
+            save_data(users_data, stats_data, f"📊 Command: /chatid by @{message.from_user.username}")
             
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_chat(
@@ -495,26 +562,15 @@ async def handle_business_message(message: types.Message):
         import traceback
         logger.error(traceback.format_exc())
 
-# =====================================================================
-# ОБРАБОТЧИК ДЛЯ ОБЫЧНЫХ СООБЩЕНИЙ (В ЛИЧКЕ БОТА)
-# =====================================================================
 @dp.message()
 async def handle_private_message(message: types.Message):
     try:
-        logger.info("=" * 60)
-        logger.info("📩 НОВОЕ СООБЩЕНИЕ В ЛИЧКЕ БОТА")
-        logger.info(f"📌 ОТ: @{message.from_user.username or 'Нет'}")
-        logger.info(f"📌 ID ПОЛЬЗОВАТЕЛЯ: {message.from_user.id}")
-        logger.info(f"📌 ТЕКСТ: {message.text}")
-        logger.info("=" * 60)
-
         if not message.text:
             return
 
         text = message.text
         user_id = message.from_user.id
 
-        # Проверяем, есть ли пользователь в users.json
         if str(user_id) not in users_data:
             await message.answer(
                 "❌ Вы не подключены к боту через Telegram Business!\n\n"
@@ -524,7 +580,6 @@ async def handle_private_message(message: types.Message):
             )
             return
 
-        # /start
         if text.lower() == '/start':
             await message.answer(
                 "🤖 БОТ АКТИВЕН\n\n"
@@ -539,7 +594,6 @@ async def handle_private_message(message: types.Message):
             )
             return
 
-        # .inf (в личке бота)
         if text.lower() == '.inf':
             await message.answer(
                 "📚 Справка по командам\n\n"
@@ -555,17 +609,14 @@ async def handle_private_message(message: types.Message):
             )
             return
 
-        # .ping
         if text.lower() == '.ping':
             await message.answer(f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}")
             return
 
-        # /chatid
         if text.lower() == '/chatid':
             await message.answer(f"🆔 Ваш ID: {user_id}")
             return
 
-        # Остальные команды — отвечаем, что они работают только в бизнес-чатах
         if text.startswith('.'):
             await message.answer(
                 "⚠️ Эта команда работает только в чатах с собеседниками!\n\n"
@@ -573,7 +624,6 @@ async def handle_private_message(message: types.Message):
             )
             return
 
-        # Если просто текст
         await message.answer(
             "❓ Неизвестная команда\n\n"
             "📌 Введи .inf для справки"
@@ -584,15 +634,61 @@ async def handle_private_message(message: types.Message):
         import traceback
         logger.error(traceback.format_exc())
 
-# =====================================================================
-# ЗАПУСК
-# =====================================================================
+@dp.callback_query()
+async def handle_callback(callback: types.CallbackQuery):
+    try:
+        data = callback.data
+        chat_id = callback.message.chat.id
+        message_id = callback.message.message_id
+        connection_id = callback.business_connection_id
+        
+        logger.info(f"🎯 Нажата кнопка: {data} от @{callback.from_user.username}")
+        
+        if data == "spam_troll":
+            await delete_business_message(chat_id, message_id, connection_id)
+            
+            await send_to_chat(
+                chat_id=chat_id,
+                text="🔥 Начинаю троллинг спам...\n\n💬 Отправляю 10 оскорблений!",
+                connection_id=connection_id
+            )
+            
+            for i, insult in enumerate(INSULTS, 1):
+                await send_to_chat(
+                    chat_id=chat_id,
+                    text=f"{i}. {insult}",
+                    connection_id=connection_id
+                )
+                await asyncio.sleep(0.5)
+            
+            await send_to_chat(
+                chat_id=chat_id,
+                text="✅ Спам завершен! Все 10 оскорблений отправлены.",
+                connection_id=connection_id
+            )
+            
+            await callback.answer()
+            return
+        
+        if data in ["spam_dev", "spam_dev2"]:
+            await callback.answer("⏳ Функция в разработке!", show_alert=True)
+            return
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка в callback: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
     logger.info(f"📌 Загружено пользователей: {len(users_data)}")
     logger.info(f"📌 Всего команд: {stats_data.get('total_commands', 0)}")
     logger.info(f"📌 Время: {get_msk_time()} (МСК)")
+    if GITHUB_TOKEN:
+        logger.info("📌 GitHub API: ВКЛЮЧЕН (данные сохраняются в репозиторий)")
+    else:
+        logger.warning("📌 GitHub API: ОТКЛЮЧЕН (данные только локально)")
     logger.info("=" * 60)
     
     try:
