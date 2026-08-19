@@ -15,6 +15,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+# ========== НАСТРОЙКА ЛОГИРОВАНИЯ (ЗАТКНУЛИ СПАМ) ==========
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -24,6 +25,11 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# ОТКЛЮЧАЕМ СПАМ ОТ AIOGRAM
+logging.getLogger('aiogram.dispatcher').setLevel(logging.WARNING)
+logging.getLogger('aiogram.event').setLevel(logging.WARNING)
+logging.getLogger('aiogram.client.session.aiohttp').setLevel(logging.WARNING)
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -715,18 +721,16 @@ async def main():
         logger.warning("📌 GitHub API: ОТКЛЮЧЕН (данные только локально)")
     logger.info("=" * 60)
     
-    # Запускаем бота с автоматическим переподключением при конфликте
-    while True:
-        try:
+    # Запускаем бота — если конфликт, просто игнорируем
+    try:
+        await dp.start_polling(bot)
+    except Exception as e:
+        if "Conflict" in str(e):
+            logger.warning("⚠️ Конфликт, но бот уже работает! Игнорируем...")
+            # Всё равно пытаемся запустить
             await dp.start_polling(bot)
-        except Exception as e:
-            if "Conflict" in str(e):
-                logger.warning("⚠️ Конфликт! Переподключаемся...")
-                # Ждём 5 секунд и пробуем снова
-                await asyncio.sleep(5)
-                continue
-            else:
-                raise
+        else:
+            raise
 
 if __name__ == "__main__":
     try:
