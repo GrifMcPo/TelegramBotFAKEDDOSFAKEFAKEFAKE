@@ -289,123 +289,66 @@ async def send_to_chat(chat_id: int, text: str, connection_id: str, reply_markup
         return None
 
 # =====================================================================
-# ОБРАБОТЧИКИ
+# ОБРАБОТЧИК ВСЕХ ОБНОВЛЕНИЙ (ДЛЯ BUSINESS CONNECTION)
 # =====================================================================
-
-@dp.message(Command("start"))
-async def start_command(message: types.Message):
-    await message.answer(
-        "🤖 БОТ АКТИВЕН\n\n"
-        "📌 Введи .inf для справки\n\n"
-        "📌 КОМАНДЫ:\n"
-        ".whois ip [IP] - пробив по IP\n"
-        ".whois number [НОМЕР] - пробив по номеру\n"
-        ".spam [Кол-во] [Текст] - спам\n"
-        ".spams - спам-меню\n"
-        ".ping - проверка\n"
-        ".inf - справка"
-    )
-
-@dp.message()
-async def handle_private_message(message: types.Message):
+@dp.update()
+async def handle_all_updates(update: types.Update):
     try:
-        if not message.text:
+        # Обработка business_connection
+        if update.business_connection:
+            connection = update.business_connection
+            if connection.user:
+                user_id = connection.user.id
+                username = connection.user.username or "Нет юзернейма"
+                first_name = connection.user.first_name or "Неизвестно"
+                now = get_msk_time()
+                
+                logger.info("=" * 60)
+                logger.info("🔗 ПОДКЛЮЧЕНИЕ К БИЗНЕС-АККАУНТУ!")
+                logger.info(f"📌 ID подключения: {connection.id}")
+                logger.info(f"👤 ПОЛЬЗОВАТЕЛЬ: @{username} (ID: {user_id})")
+                logger.info(f"🕐 ВРЕМЯ: {now}")
+                logger.info("=" * 60)
+                
+                stats_data["total_connections"] += 1
+                if str(user_id) not in stats_data["users"]:
+                    stats_data["users"][str(user_id)] = {"commands": 0}
+                
+                users_data[str(user_id)] = {
+                    "username": username,
+                    "first_name": first_name,
+                    "connected_at": now,
+                    "last_active": now,
+                    "connection_id": connection.id
+                }
+                
+                save_data(users_data, stats_data, f"🔗 New connection: @{username}")
+                
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=f"✅ БОТ АКТИВЕН!\n\n"
+                         f"👤 Вы подключены к боту!\n"
+                         f"🆔 Ваш ID: {user_id}\n"
+                         f"🕐 Время: {now} (МСК)\n"
+                         f"📌 Команды работают для вас!\n\n"
+                         f"🔥 Введите .inf для справки."
+                )
             return
 
-        text = message.text
-        user_id = message.from_user.id
-
-        if text.lower() == '/start':
-            await start_command(message)
+        # Обработка business_message
+        if update.business_message:
+            message = update.business_message
+            await handle_business_message(message)
             return
-
-        if text.lower() == '.inf':
-            await message.answer(
-                "📚 Справка по командам\n\n"
-                "🐢 ПРОБИВ\n"
-                ".whois ip [IP] - Пробив по IP-адресу\n"
-                ".whois number [НОМЕР] - Пробив по номеру телефона\n\n"
-                "🔥 СПАМ\n"
-                ".spam [Кол-во] [Текст] - Спам вашим сообщением\n"
-                ".spams - Открыть спам-меню\n\n"
-                "⚡ ДРУГОЕ\n"
-                ".ping - Проверка работы бота\n"
-                ".inf - Эта справка"
-            )
-            return
-
-        if text.lower() == '.ping':
-            await message.answer(f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}")
-            return
-
-        if text.lower() == '/chatid':
-            await message.answer(f"🆔 Ваш ID: {user_id}")
-            return
-
-        if text.startswith('.'):
-            await message.answer(
-                "⚠️ Эта команда работает только в чатах с собеседниками!\n\n"
-                "📌 Напиши команду в личном чате с собеседником, где подключен бот."
-            )
-            return
-
-        await message.answer(
-            "❓ Неизвестная команда\n\n"
-            "📌 Введи .inf для справки"
-        )
 
     except Exception as e:
-        logger.error(f"❌ ОШИБКА: {e}")
+        logger.error(f"❌ Ошибка в handle_all_updates: {e}")
         import traceback
         logger.error(traceback.format_exc())
 
 # =====================================================================
-# БИЗНЕС-ОБРАБОТЧИКИ (ЧЕРЕЗ business_connection_id)
+# ОБРАБОТЧИК БИЗНЕС-СООБЩЕНИЙ
 # =====================================================================
-
-@dp.business_connection()
-async def handle_business_connection(update: types.Update):
-    # В aiogram 3.x business_connection приходит как часть update
-    if hasattr(update, 'business_connection') and update.business_connection:
-        connection = update.business_connection
-        if connection.user:
-            user_id = connection.user.id
-            username = connection.user.username or "Нет юзернейма"
-            first_name = connection.user.first_name or "Неизвестно"
-            now = get_msk_time()
-            
-            logger.info("=" * 60)
-            logger.info("🔗 ПОДКЛЮЧЕНИЕ К БИЗНЕС-АККАУНТУ!")
-            logger.info(f"📌 ID подключения: {connection.id}")
-            logger.info(f"👤 ПОЛЬЗОВАТЕЛЬ: @{username} (ID: {user_id})")
-            logger.info(f"🕐 ВРЕМЯ: {now}")
-            logger.info("=" * 60)
-            
-            stats_data["total_connections"] += 1
-            if str(user_id) not in stats_data["users"]:
-                stats_data["users"][str(user_id)] = {"commands": 0}
-            
-            users_data[str(user_id)] = {
-                "username": username,
-                "first_name": first_name,
-                "connected_at": now,
-                "last_active": now,
-                "connection_id": connection.id
-            }
-            
-            save_data(users_data, stats_data, f"🔗 New connection: @{username}")
-            
-            await bot.send_message(
-                chat_id=user_id,
-                text=f"✅ БОТ АКТИВЕН!\n\n"
-                     f"👤 Вы подключены к боту!\n"
-                     f"🆔 Ваш ID: {user_id}\n"
-                     f"🕐 Время: {now} (МСК)\n"
-                     f"📌 Команды работают для вас!\n\n"
-                     f"🔥 Введите .inf для справки."
-            )
-
-@dp.business_message()
 async def handle_business_message(message: types.Message):
     try:
         logger.info("=" * 60)
@@ -643,6 +586,79 @@ async def handle_business_message(message: types.Message):
         import traceback
         logger.error(traceback.format_exc())
 
+# =====================================================================
+# ОБРАБОТЧИК ОБЫЧНЫХ СООБЩЕНИЙ
+# =====================================================================
+@dp.message(Command("start"))
+async def start_command(message: types.Message):
+    await message.answer(
+        "🤖 БОТ АКТИВЕН\n\n"
+        "📌 Введи .inf для справки\n\n"
+        "📌 КОМАНДЫ:\n"
+        ".whois ip [IP] - пробив по IP\n"
+        ".whois number [НОМЕР] - пробив по номеру\n"
+        ".spam [Кол-во] [Текст] - спам\n"
+        ".spams - спам-меню\n"
+        ".ping - проверка\n"
+        ".inf - справка"
+    )
+
+@dp.message()
+async def handle_private_message(message: types.Message):
+    try:
+        if not message.text:
+            return
+
+        text = message.text
+        user_id = message.from_user.id
+
+        if text.lower() == '/start':
+            await start_command(message)
+            return
+
+        if text.lower() == '.inf':
+            await message.answer(
+                "📚 Справка по командам\n\n"
+                "🐢 ПРОБИВ\n"
+                ".whois ip [IP] - Пробив по IP-адресу\n"
+                ".whois number [НОМЕР] - Пробив по номеру телефона\n\n"
+                "🔥 СПАМ\n"
+                ".spam [Кол-во] [Текст] - Спам вашим сообщением\n"
+                ".spams - Открыть спам-меню\n\n"
+                "⚡ ДРУГОЕ\n"
+                ".ping - Проверка работы бота\n"
+                ".inf - Эта справка"
+            )
+            return
+
+        if text.lower() == '.ping':
+            await message.answer(f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}")
+            return
+
+        if text.lower() == '/chatid':
+            await message.answer(f"🆔 Ваш ID: {user_id}")
+            return
+
+        if text.startswith('.'):
+            await message.answer(
+                "⚠️ Эта команда работает только в чатах с собеседниками!\n\n"
+                "📌 Напиши команду в личном чате с собеседником, где подключен бот."
+            )
+            return
+
+        await message.answer(
+            "❓ Неизвестная команда\n\n"
+            "📌 Введи .inf для справки"
+        )
+
+    except Exception as e:
+        logger.error(f"❌ ОШИБКА: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+
+# =====================================================================
+# ОБРАБОТЧИК КНОПОК
+# =====================================================================
 @dp.callback_query()
 async def handle_callback(callback: types.CallbackQuery):
     try:
@@ -688,6 +704,9 @@ async def handle_callback(callback: types.CallbackQuery):
         import traceback
         logger.error(traceback.format_exc())
 
+# =====================================================================
+# ЗАПУСК
+# =====================================================================
 async def main():
     logger.info("=" * 60)
     logger.info("🔥 БОТ ЗАПУЩЕН!")
