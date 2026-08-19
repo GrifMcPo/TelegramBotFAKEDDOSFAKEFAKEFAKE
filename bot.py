@@ -15,7 +15,8 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# ========== НАСТРОЙКА ЛОГИРОВАНИЯ (ЗАТКНУЛИ СПАМ) ==========
+# ========== НАСТРОЙКА ЛОГИРОВАНИЯ ==========
+# ОТКЛЮЧАЕМ ВСЁ, ЧТО НЕ ОТНОСИТСЯ К НАШЕМУ КОДУ
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -24,12 +25,17 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)
     ]
 )
-logger = logging.getLogger(__name__)
 
-# ОТКЛЮЧАЕМ СПАМ ОТ AIOGRAM
-logging.getLogger('aiogram.dispatcher').setLevel(logging.WARNING)
-logging.getLogger('aiogram.event').setLevel(logging.WARNING)
-logging.getLogger('aiogram.client.session.aiohttp').setLevel(logging.WARNING)
+# ЗАТКИНУЛИ ВЕСЬ СПАМ ОТ AIOGRAM
+logging.getLogger('aiogram').setLevel(logging.ERROR)
+logging.getLogger('aiogram.dispatcher').setLevel(logging.ERROR)
+logging.getLogger('aiogram.event').setLevel(logging.ERROR)
+logging.getLogger('aiogram.client').setLevel(logging.ERROR)
+logging.getLogger('aiogram.client.session').setLevel(logging.ERROR)
+logging.getLogger('aiogram.client.session.aiohttp').setLevel(logging.ERROR)
+logging.getLogger('aiogram.utils').setLevel(logging.ERROR)
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -308,12 +314,7 @@ async def handle_all_updates(update: types.Update):
                 first_name = connection.user.first_name or "Неизвестно"
                 now = get_msk_time()
                 
-                logger.info("=" * 60)
-                logger.info("🔗 ПОДКЛЮЧЕНИЕ К БИЗНЕС-АККАУНТУ!")
-                logger.info(f"📌 ID подключения: {connection.id}")
-                logger.info(f"👤 ПОЛЬЗОВАТЕЛЬ: @{username} (ID: {user_id})")
-                logger.info(f"🕐 ВРЕМЯ: {now}")
-                logger.info("=" * 60)
+                logger.info("🔗 ПОДКЛЮЧЕНИЕ: @{} (ID: {})".format(username, user_id))
                 
                 stats_data["total_connections"] += 1
                 if str(user_id) not in stats_data["users"]:
@@ -346,20 +347,14 @@ async def handle_all_updates(update: types.Update):
             return
 
     except Exception as e:
-        logger.error(f"❌ Ошибка в handle_all_updates: {e}")
+        logger.error(f"❌ Ошибка: {e}")
 
 # =====================================================================
 # ОБРАБОТЧИК БИЗНЕС-СООБЩЕНИЙ
 # =====================================================================
 async def handle_business_message(message: types.Message):
     try:
-        logger.info("=" * 60)
-        logger.info("📩 НОВОЕ СООБЩЕНИЕ ИЗ БИЗНЕС-ЧАТА")
-        logger.info(f"📌 ОТ: @{message.from_user.username or 'Нет'}")
-        logger.info(f"📌 ID ПОЛЬЗОВАТЕЛЯ: {message.from_user.id}")
-        logger.info(f"📌 ID ЧАТА: {message.chat.id}")
-        logger.info(f"📌 ТЕКСТ: {message.text}")
-        logger.info("=" * 60)
+        logger.info("📩 {}: {}".format(message.from_user.username or "Нет", message.text))
 
         user_id = message.from_user.id
         chat_id = message.chat.id
@@ -707,7 +702,7 @@ async def handle_callback(callback: types.CallbackQuery):
         logger.error(traceback.format_exc())
 
 # =====================================================================
-# ЗАПУСК С АВТОУБИЙСТВОМ КОНФЛИКТОВ
+# ЗАПУСК
 # =====================================================================
 async def main():
     logger.info("=" * 60)
@@ -716,21 +711,12 @@ async def main():
     logger.info(f"📌 Всего команд: {stats_data.get('total_commands', 0)}")
     logger.info(f"📌 Время: {get_msk_time()} (МСК)")
     if GITHUB_TOKEN:
-        logger.info("📌 GitHub API: ВКЛЮЧЕН (данные сохраняются в репозиторий)")
+        logger.info("📌 GitHub API: ВКЛЮЧЕН")
     else:
-        logger.warning("📌 GitHub API: ОТКЛЮЧЕН (данные только локально)")
+        logger.warning("📌 GitHub API: ОТКЛЮЧЕН")
     logger.info("=" * 60)
     
-    # Запускаем бота — если конфликт, просто игнорируем
-    try:
-        await dp.start_polling(bot)
-    except Exception as e:
-        if "Conflict" in str(e):
-            logger.warning("⚠️ Конфликт, но бот уже работает! Игнорируем...")
-            # Всё равно пытаемся запустить
-            await dp.start_polling(bot)
-        else:
-            raise
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     try:
