@@ -4,6 +4,9 @@ on:
   push:
     branches: [ main, master ]
   workflow_dispatch:
+  schedule:
+    # Каждые 6 часов — автоматический перезапуск
+    - cron: '0 */6 * * *'
 
 jobs:
   deploy:
@@ -27,9 +30,57 @@ jobs:
     - name: 🔧 Create .env file
       run: |
         echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" >> .env
-        echo "ADMIN_ID=${{ secrets.ADMIN_ID }}" >> .env
         echo "✅ .env created"
-        cat .env | sed 's/BOT_TOKEN=.*/BOT_TOKEN=***СКРЫТО***/'
     
-    - name: 🤖 Run bot
-      run: python bot.py
+    - name: 📥 Restore users data (если есть)
+      id: restore_cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          users.json
+          stats.json
+          bot.log
+        key: bot-data-${{ github.run_id }}
+        restore-keys: |
+          bot-data-
+    
+    - name: 📊 Show current data
+      run: |
+        echo "📊 ТЕКУЩИЕ ДАННЫЕ:"
+        if [ -f "users.json" ]; then
+          echo "✅ users.json найден ($(cat users.json | jq '. | length') пользователей)"
+          cat users.json | head -20
+        else
+          echo "❌ users.json не найден, создадим новый"
+        fi
+        if [ -f "stats.json" ]; then
+          echo "✅ stats.json найден"
+          cat stats.json
+        else
+          echo "❌ stats.json не найден, создадим новый"
+        fi
+    
+    - name: 🤖 Run bot (6 hours timeout)
+      run: |
+        python bot.py
+      timeout-minutes: 360
+    
+    - name: 📤 Save data (после остановки)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: bot-data-${{ github.run_id }}
+        path: |
+          users.json
+          stats.json
+          bot.log
+        retention-days: 7
+    
+    - name: 📤 Save data to repo (коммит)
+      if: always()
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add users.json stats.json bot.log 2>/dev/null || true
+        git commit -m "📊 Auto-update: $(date '+%Y-%m-%d %H:%M:%S')" || echo "No changes"
+        git push || echo "Push failed"
