@@ -1,9 +1,9 @@
 name: 🚀 Deploy Bot
 
 on:
-  workflow_dispatch:
-  push:
-    branches: [ main, master ]
+  workflow_dispatch:  # ТОЛЬКО РУЧНОЙ ЗАПУСК!
+  schedule:
+    - cron: '0 */6 * * *'  # КАЖДЫЕ 6 ЧАСОВ (по желанию)
 
 jobs:
   deploy:
@@ -13,15 +13,35 @@ jobs:
     steps:
     - name: 📥 Checkout
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Полная история для правильного коммита
+    
+    - name: 📥 Restore logs from GitHub
+      run: |
+        # Скачиваем последний logs.json из репозитория
+        if curl -s -o logs.json "https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/logs.json"; then
+          echo "✅ logs.json загружен"
+        else
+          echo "[]" > logs.json
+          echo "📄 Создан новый logs.json"
+        fi
+        
+        if curl -s -o blacklist.json "https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/blacklist.json"; then
+          echo "✅ blacklist.json загружен"
+        else
+          echo "{}" > blacklist.json
+          echo "📄 Создан новый blacklist.json"
+        fi
     
     - name: 🐍 Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     
-    - name: 📦 Install
+    - name: 📦 Install dependencies
       run: |
-        pip install aiogram python-dotenv requests phonenumbers
+        pip install --upgrade pip
+        pip install -r requirements.txt
     
     - name: 🔧 Create .env
       run: |
@@ -30,3 +50,20 @@ jobs:
     
     - name: 🤖 Run bot
       run: python bot.py
+    
+    - name: 📤 Save logs and blacklist
+      if: always()
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # Добавляем файлы
+        git add logs.json blacklist.json 2>/dev/null || true
+        
+        # Коммитим только если есть изменения
+        if ! git diff --cached --quiet; then
+          git commit -m "📊 Update data $(date '+%Y-%m-%d %H:%M:%S')" || echo "No changes"
+          git push
+        else
+          echo "✅ Нет изменений для сохранения"
+        fi
