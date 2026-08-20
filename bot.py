@@ -15,7 +15,30 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-logging.basicConfig(level=logging.INFO)
+# ========== ПОЛНОСТЬЮ ЗАТКИВАЕМ ЛОГИ ==========
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('bot.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+# ОТКЛЮЧАЕМ ВЕСЬ СПАМ ОТ AIOGRAM
+for name in logging.root.manager.loggerDict:
+    if 'aiogram' in name:
+        logging.getLogger(name).setLevel(logging.CRITICAL)
+
+logging.getLogger('aiogram').setLevel(logging.CRITICAL)
+logging.getLogger('aiogram.dispatcher').setLevel(logging.CRITICAL)
+logging.getLogger('aiogram.event').setLevel(logging.CRITICAL)
+logging.getLogger('aiogram.client').setLevel(logging.CRITICAL)
+logging.getLogger('aiogram.client.session').setLevel(logging.CRITICAL)
+logging.getLogger('aiogram.client.session.aiohttp').setLevel(logging.CRITICAL)
+logging.getLogger('aiogram.utils').setLevel(logging.CRITICAL)
+logging.getLogger('aiogram.bot').setLevel(logging.CRITICAL)
+
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -84,7 +107,6 @@ def save_file_to_github(filename, data, message="📊 Update logs"):
         logger.error(f"❌ Ошибка: {e}")
         return False
 
-# ========== ЗАГРУЗКА/СОХРАНЕНИЕ ЛОГОВ ==========
 def load_logs():
     logs, _ = get_file_from_github(LOGS_FILE)
     return logs if logs else []
@@ -255,7 +277,7 @@ def analyze_phone_results(results, local_data):
     
     return final
 
-# ========== КОМАНДА /START ==========
+# ========== КОМАНДЫ ==========
 @dp.message(Command("start"))
 async def start(message: types.Message):
     save_log({
@@ -270,11 +292,10 @@ async def start(message: types.Message):
     await message.answer(
         "🔥 ДОБРО ПОЖАЛОВАТЬ В СИСТЕМУ\n\n"
         "📌 Бот для получения информации по IP и номерам\n\n"
-        "💡 Для списка команд введите /help",
+        "💡 /help - список команд",
         reply_markup=get_main_keyboard()
     )
 
-# ========== КОМАНДА /HELP ==========
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
     save_log({
@@ -298,7 +319,6 @@ async def help_command(message: types.Message):
         "/whois number 89001234567"
     )
 
-# ========== КОМАНДА /WHOIS ==========
 @dp.message(Command("whois"))
 async def whois_command(message: types.Message):
     args = message.text.split()
@@ -317,7 +337,6 @@ async def whois_command(message: types.Message):
     else:
         await message.answer("❌ Используйте: ip или number")
 
-# ========== ПРОБИВ IP ==========
 async def probe_ip_command(message: types.Message, ip: str):
     try:
         ipaddress.ip_address(ip)
@@ -335,7 +354,6 @@ async def probe_ip_command(message: types.Message, ip: str):
         "time": get_msk_time()
     })
     
-    # АНИМАЦИЯ
     loading = await show_connection_animation(message)
     
     results, success_count = await probe_ip(ip)
@@ -356,7 +374,6 @@ async def probe_ip_command(message: types.Message, ip: str):
         f"📊 ОБРАБОТАНО: {success_count}/5 серверов"
     )
 
-# ========== ПРОБИВ НОМЕРА ==========
 async def probe_phone_command(message: types.Message, phone: str):
     save_log({
         "type": "probe",
@@ -392,7 +409,6 @@ async def probe_phone_command(message: types.Message, phone: str):
         f"📊 ОБРАБОТАНО: {success_count} серверов"
     )
 
-# ========== СТАТИСТИКА ==========
 @dp.message(Command("stats"))
 async def stats_command(message: types.Message):
     logs = load_logs()
@@ -430,7 +446,18 @@ async def main():
     print("📌 Логи сохраняются в logs.json (GitHub)")
     print("📌 Команды: /start, /help, /whois ip, /whois number")
     print("=" * 60)
-    await dp.start_polling(bot)
+    
+    # Запускаем с автоматическим переподключением при конфликте
+    while True:
+        try:
+            await dp.start_polling(bot)
+        except Exception as e:
+            if "Conflict" in str(e):
+                print("⚠️ Конфликт! Переподключаемся через 5 секунд...")
+                await asyncio.sleep(5)
+                continue
+            else:
+                raise
 
 if __name__ == "__main__":
     try:
@@ -439,3 +466,4 @@ if __name__ == "__main__":
         print("⏹️ Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка: {e}")
+        sys.exit(1)
