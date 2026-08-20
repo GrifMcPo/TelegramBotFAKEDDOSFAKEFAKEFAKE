@@ -8,6 +8,7 @@
 </head>
 <body>
 
+    <!-- ========== ВХОД ========== -->
     <div id="loginPage" class="login-page">
         <div class="login-container">
             <div class="login-header">
@@ -26,12 +27,14 @@
         <div class="rgb-bg"></div>
     </div>
 
+    <!-- ========== ГЛАВНАЯ ========== -->
     <div id="mainPage" class="main-page" style="display: none;">
+        
         <header>
             <div class="header-container">
                 <div class="header-logo"><span>⚡</span><h1>ADMIN PANEL</h1></div>
                 <div class="header-user">
-                    <span id="userInfo">👤 Администратор</span>
+                    <span>👤 Администратор</span>
                     <button id="logoutBtn" class="logout-btn">🚪 Выйти</button>
                 </div>
             </div>
@@ -86,6 +89,17 @@
                 <p>© 2026 ADMIN PANEL</p>
             </div>
         </footer>
+    </div>
+
+    <!-- ========== МОДАЛКА ========== -->
+    <div id="chatModal" class="chat-modal">
+        <div class="chat-modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">💬 Чат с пользователем</h2>
+                <button class="modal-close" onclick="closeChat()">✕</button>
+            </div>
+            <div id="modalMessages"></div>
+        </div>
     </div>
 
     <script src="script.js"></script>
