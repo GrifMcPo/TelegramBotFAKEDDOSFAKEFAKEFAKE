@@ -5,6 +5,7 @@ import logging
 import re
 import requests
 import json
+import base64
 import ipaddress
 import phonenumbers
 from phonenumbers import carrier, geocoder, timezone
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "8857252828"))
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 if not BOT_TOKEN:
     print("❌ Токен не найден!")
@@ -28,21 +30,70 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ========== ФАЙЛ ДЛЯ ЛОГОВ ==========
+# ========== НАСТРОЙКИ GITHUB ==========
+REPO_OWNER = "GrifMcPo"
+REPO_NAME = "TelegramBotFAKEDDOSFAKEFAKEFAKE"
+BRANCH = "main"
 LOGS_FILE = "logs.json"
 
-def load_logs():
+def get_github_headers():
+    return {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+
+def get_file_from_github(filename):
     try:
-        with open(LOGS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        if not GITHUB_TOKEN:
+            return None, None
+        url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{filename}'
+        headers = get_github_headers()
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            content = base64.b64decode(data['content']).decode('utf-8')
+            return json.loads(content), data['sha']
+        elif response.status_code == 404:
+            return [], None
+        return [], None
     except:
-        return []
+        return [], None
+
+def save_file_to_github(filename, data, message="📊 Update logs"):
+    try:
+        if not GITHUB_TOKEN:
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            return True
+        url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{filename}'
+        headers = get_github_headers()
+        existing, sha = get_file_from_github(filename)
+        content = json.dumps(data, indent=2, ensure_ascii=False)
+        encoded = base64.b64encode(content.encode('utf-8')).decode('utf-8')
+        payload = {'message': message, 'content': encoded, 'branch': BRANCH}
+        if sha:
+            payload['sha'] = sha
+        response = requests.put(url, headers=headers, json=payload)
+        if response.status_code in [200, 201]:
+            logger.info(f"✅ Файл {filename} сохранен в GitHub")
+            return True
+        else:
+            logger.error(f"❌ Ошибка сохранения: {response.status_code}")
+            return False
+    except Exception as e:
+        logger.error(f"❌ Ошибка: {e}")
+        return False
+
+# ========== ЗАГРУЗКА/СОХРАНЕНИЕ ЛОГОВ ==========
+def load_logs():
+    logs, _ = get_file_from_github(LOGS_FILE)
+    return logs if logs else []
 
 def save_log(log_entry):
     logs = load_logs()
     logs.append(log_entry)
-    with open(LOGS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(logs, f, indent=2, ensure_ascii=False)
+    save_file_to_github(LOGS_FILE, logs, f"📊 New log: {log_entry.get('command', 'unknown')}")
+    return logs
 
 def get_msk_time():
     return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
@@ -55,6 +106,61 @@ def get_main_keyboard():
         [InlineKeyboardButton(text="📊 СТАТИСТИКА", callback_data="stats")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+# ========== АНИМАЦИЯ ПОДКЛЮЧЕНИЯ ==========
+async def show_connection_animation(message: types.Message):
+    msg = await message.answer(
+        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+        "📡 Сервер #1... ████░░░░░░ 40%\n"
+        "📡 Сервер #2... ░░░░░░░░░░ 0%\n"
+        "📡 Сервер #3... ░░░░░░░░░░ 0%\n"
+        "📡 Сервер #4... ░░░░░░░░░░ 0%\n"
+        "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
+        "⏳ Ожидайте..."
+    )
+    await asyncio.sleep(0.6)
+    
+    await msg.edit_text(
+        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+        "📡 Сервер #1... ████████░░ 80%\n"
+        "📡 Сервер #2... ██████░░░░ 60%\n"
+        "📡 Сервер #3... ████░░░░░░ 40%\n"
+        "📡 Сервер #4... ██░░░░░░░░ 20%\n"
+        "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
+        "⏳ Ожидайте..."
+    )
+    await asyncio.sleep(0.6)
+    
+    await msg.edit_text(
+        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+        "📡 Сервер #1... ██████████ 100% ✅\n"
+        "📡 Сервер #2... ██████████ 100% ✅\n"
+        "📡 Сервер #3... ████████░░ 80%\n"
+        "📡 Сервер #4... ██████░░░░ 60%\n"
+        "📡 Сервер #5... ████░░░░░░ 40%\n\n"
+        "⏳ Ожидайте..."
+    )
+    await asyncio.sleep(0.6)
+    
+    await msg.edit_text(
+        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+        "📡 Сервер #1... ██████████ 100% ✅\n"
+        "📡 Сервер #2... ██████████ 100% ✅\n"
+        "📡 Сервер #3... ██████████ 100% ✅\n"
+        "📡 Сервер #4... ████████░░ 80%\n"
+        "📡 Сервер #5... ██████░░░░ 60%\n\n"
+        "⏳ Ожидайте..."
+    )
+    await asyncio.sleep(0.6)
+    
+    await msg.edit_text(
+        "✅ ПОДКЛЮЧЕНИЕ ВЫПОЛНЕНО\n\n"
+        "📊 Получение данных...\n"
+        "⏳ Обработка информации..."
+    )
+    await asyncio.sleep(0.5)
+    
+    return msg
 
 # ========== ФУНКЦИЯ ПРОБИВА IP ==========
 async def probe_ip(ip: str):
@@ -152,7 +258,6 @@ def analyze_phone_results(results, local_data):
 # ========== КОМАНДА /START ==========
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    # Сохраняем в логи
     save_log({
         "type": "command",
         "command": "/start",
@@ -183,16 +288,11 @@ async def help_command(message: types.Message):
     
     await message.answer(
         "📚 СПИСОК КОМАНД\n\n"
-        "────────────────────\n"
         "/start - Главное меню\n"
         "/help - Эта справка\n\n"
-        "────────────────────\n"
         "🔍 ПРОБИВ\n"
-        "/whois ip [IP] - Пробив по IP-адресу\n"
-        "/whois number [НОМЕР] - Пробив по номеру телефона\n\n"
-        "────────────────────\n"
-        "📊 СТАТИСТИКА\n"
-        "/stats - Статистика бота\n\n"
+        "/whois ip [IP] - Пробив по IP\n"
+        "/whois number [НОМЕР] - Пробив по номеру\n\n"
         "💡 Примеры:\n"
         "/whois ip 8.8.8.8\n"
         "/whois number 89001234567"
@@ -204,7 +304,7 @@ async def whois_command(message: types.Message):
     args = message.text.split()
     
     if len(args) < 3:
-        await message.answer("❌ Неправильный формат\n\n/whois ip [IP]\n/whois number [НОМЕР]")
+        await message.answer("❌ /whois ip [IP] или /whois number [НОМЕР]")
         return
     
     command_type = args[1].lower()
@@ -215,7 +315,7 @@ async def whois_command(message: types.Message):
     elif command_type == "number":
         await probe_phone_command(message, target)
     else:
-        await message.answer("❌ Неизвестный тип\nИспользуйте: ip или number")
+        await message.answer("❌ Используйте: ip или number")
 
 # ========== ПРОБИВ IP ==========
 async def probe_ip_command(message: types.Message, ip: str):
@@ -225,7 +325,6 @@ async def probe_ip_command(message: types.Message, ip: str):
         await message.answer(f"❌ Некорректный IP: {ip}")
         return
     
-    # Сохраняем в логи
     save_log({
         "type": "probe",
         "command": f"/whois ip {ip}",
@@ -236,8 +335,8 @@ async def probe_ip_command(message: types.Message, ip: str):
         "time": get_msk_time()
     })
     
-    loading = await message.answer("🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ...")
-    await asyncio.sleep(1)
+    # АНИМАЦИЯ
+    loading = await show_connection_animation(message)
     
     results, success_count = await probe_ip(ip)
     final = analyze_ip_results(results)
@@ -269,8 +368,7 @@ async def probe_phone_command(message: types.Message, phone: str):
         "time": get_msk_time()
     })
     
-    loading = await message.answer("🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ...")
-    await asyncio.sleep(1)
+    loading = await show_connection_animation(message)
     
     results, success_count, local_data = await probe_phone(phone)
     
@@ -299,11 +397,12 @@ async def probe_phone_command(message: types.Message, phone: str):
 async def stats_command(message: types.Message):
     logs = load_logs()
     total = len(logs)
+    users = set(l.get('user_id') for l in logs)
     probes = len([l for l in logs if l.get("type") == "probe"])
     
     await message.answer(
         f"📊 СТАТИСТИКА\n\n"
-        f"👤 Пользователей: {len(set(l.get('user_id') for l in logs))}\n"
+        f"👤 Пользователей: {len(users)}\n"
         f"📝 Всего команд: {total}\n"
         f"🔍 Пробивов: {probes}\n"
         f"🕐 Время: {get_msk_time()}"
@@ -315,10 +414,10 @@ async def handle_callback(callback: types.CallbackQuery):
     data = callback.data
     
     if data == "probe_ip":
-        await callback.message.answer("🌐 ВВЕДИТЕ IP-АДРЕС\n📌 Пример: 8.8.8.8")
+        await callback.message.answer("🌐 ВВЕДИТЕ IP\n📌 Пример: 8.8.8.8")
         await callback.answer()
     elif data == "probe_phone":
-        await callback.message.answer("📱 ВВЕДИТЕ НОМЕР ТЕЛЕФОНА\n📌 Пример: 89001234567")
+        await callback.message.answer("📱 ВВЕДИТЕ НОМЕР\n📌 Пример: 89001234567")
         await callback.answer()
     elif data == "stats":
         await stats_command(callback.message)
@@ -328,7 +427,8 @@ async def handle_callback(callback: types.CallbackQuery):
 async def main():
     print("=" * 60)
     print("🔥 БОТ ЗАПУЩЕН!")
-    print("📌 Логи сохраняются в logs.json")
+    print("📌 Логи сохраняются в logs.json (GitHub)")
+    print("📌 Команды: /start, /help, /whois ip, /whois number")
     print("=" * 60)
     await dp.start_polling(bot)
 
