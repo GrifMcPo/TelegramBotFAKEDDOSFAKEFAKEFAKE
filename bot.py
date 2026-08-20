@@ -5,6 +5,7 @@ import logging
 import re
 import requests
 import json
+import base64
 import sqlite3
 import ipaddress
 import phonenumbers
@@ -15,13 +16,14 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# ========== НАСТРОЙКА ЛОГИРОВАНИЯ ==========
+# ========== НАСТРОЙКА ==========
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "8857252828"))
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 if not BOT_TOKEN:
     print("❌ Токен не найден!")
@@ -30,9 +32,72 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ========== SQLite БАЗА ДАННЫХ ==========
+# ========== НАСТРОЙКИ GITHUB ==========
+REPO_OWNER = "GrifMcPo"
+REPO_NAME = "TelegramBotFAKEDDOSFAKEFAKEFAKE"
+BRANCH = "main"
 DB_FILE = "logs.db"
+JSON_FILE = "logs.json"
 
+def get_github_headers():
+    return {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+
+def get_file_from_github(filename):
+    """Скачивает файл с GitHub"""
+    try:
+        if not GITHUB_TOKEN:
+            return None
+        url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{filename}'
+        headers = get_github_headers()
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            content = base64.b64decode(data['content'])
+            return content
+        return None
+    except:
+        return None
+
+def save_file_to_github(filename, content, message="📊 Update DB"):
+    """Сохраняет файл в GitHub"""
+    try:
+        if not GITHUB_TOKEN:
+            with open(filename, 'wb') as f:
+                f.write(content)
+            return True
+            
+        url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{filename}'
+        headers = get_github_headers()
+        
+        # Проверяем существование файла
+        existing = None
+        try:
+            resp = requests.get(url, headers=headers)
+            if resp.status_code == 200:
+                existing = resp.json()
+        except:
+            pass
+        
+        encoded = base64.b64encode(content).decode('utf-8')
+        payload = {'message': message, 'content': encoded, 'branch': BRANCH}
+        if existing:
+            payload['sha'] = existing['sha']
+        
+        response = requests.put(url, headers=headers, json=payload)
+        if response.status_code in [200, 201]:
+            logger.info(f"✅ Файл {filename} сохранен в GitHub")
+            return True
+        else:
+            logger.error(f"❌ Ошибка сохранения: {response.status_code}")
+            return False
+    except Exception as e:
+        logger.error(f"❌ Ошибка: {e}")
+        return False
+
+# ========== SQLite БАЗА ДАННЫХ ==========
 def init_db():
     """Создаёт таблицу если её нет"""
     conn = sqlite3.connect(DB_FILE)
@@ -49,12 +114,41 @@ def init_db():
             time TEXT
         )
     ''')
-    # Индексы для быстрого поиска
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_id ON logs (user_id)')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_time ON logs (time)')
     conn.commit()
     conn.close()
     logger.info("✅ База данных инициализирована")
+
+def restore_db_from_github():
+    """Восстанавливает БД из GitHub при запуске"""
+    try:
+        db_data = get_file_from_github(DB_FILE)
+        if db_data:
+            with open(DB_FILE, 'wb') as f:
+                f.write(db_data)
+            logger.info("✅ База данных восстановлена из GitHub")
+            return True
+        else:
+            logger.info("📄 Файл БД не найден в GitHub, создаём новую")
+            init_db()
+            return False
+    except Exception as e:
+        logger.error(f"❌ Ошибка восстановления БД: {e}")
+        init_db()
+        return False
+
+def backup_db_to_github():
+    """Сохраняет БД в GitHub"""
+    try:
+        if os.path.exists(DB_FILE):
+            with open(DB_FILE, 'rb') as f:
+                db_data = f.read()
+            return save_file_to_github(DB_FILE, db_data, f"📊 Backup DB - {get_msk_time()}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Ошибка бэкапа БД: {e}")
+        return False
 
 def save_log(log_entry):
     """Сохраняет запись в базу"""
@@ -74,13 +168,21 @@ def save_log(log_entry):
             log_entry.get('time', get_msk_time())
         ))
         conn.commit()
+        
+        # Получаем ID последней записи
+        last_id = cursor.lastrowid
         conn.close()
+        
+        # Бэкапим каждые 10 записей
+        if last_id % 10 == 0:
+            asyncio.create_task(backup_db_to_github())
+        
         return True
     except Exception as e:
         logger.error(f"❌ Ошибка сохранения в БД: {e}")
         return False
 
-def get_all_logs(limit=100):
+def get_all_logs(limit=200):
     """Получает последние записи"""
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -106,36 +208,20 @@ def get_all_logs(limit=100):
         logger.error(f"❌ Ошибка чтения БД: {e}")
         return []
 
-def get_users_stats():
-    """Статистика по пользователям"""
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT user_id, username, full_name, COUNT(*) as count, MAX(time) as last
-            FROM logs 
-            GROUP BY user_id 
-            ORDER BY count DESC
-        ''')
-        rows = cursor.fetchall()
-        conn.close()
-        
-        users = []
-        for row in rows:
-            users.append({
-                'user_id': row[0],
-                'username': row[1] or 'Нет',
-                'full_name': row[2] or 'Нет',
-                'count': row[3],
-                'last': row[4] or 'Нет'
-            })
-        return users
-    except Exception as e:
-        logger.error(f"❌ Ошибка статистики: {e}")
-        return []
+def export_to_json():
+    """Экспортирует логи в JSON для сайта"""
+    logs = get_all_logs(500)
+    with open(JSON_FILE, 'w', encoding='utf-8') as f:
+        json.dump(logs, f, indent=2, ensure_ascii=False)
+    
+    # Сохраняем JSON в GitHub
+    with open(JSON_FILE, 'r', encoding='utf-8') as f:
+        content = f.read()
+    save_file_to_github(JSON_FILE, content.encode('utf-8'), f"📊 Export JSON - {get_msk_time()}")
+    return True
 
-def get_total_stats():
-    """Общая статистика"""
+def get_stats():
+    """Получает статистику"""
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
@@ -155,39 +241,16 @@ def get_total_stats():
         logger.error(f"❌ Ошибка статистики: {e}")
         return {'total': 0, 'users': 0, 'probes': 0}
 
-def get_user_logs(user_id):
-    """Все логи конкретного пользователя"""
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM logs WHERE user_id = ? ORDER BY id DESC', (user_id,))
-        rows = cursor.fetchall()
-        conn.close()
-        
-        logs = []
-        for row in rows:
-            logs.append({
-                'id': row[0],
-                'type': row[1],
-                'command': row[2],
-                'user_id': row[3],
-                'username': row[4],
-                'full_name': row[5],
-                'target': row[6],
-                'time': row[7]
-            })
-        return logs
-    except Exception as e:
-        logger.error(f"❌ Ошибка: {e}")
-        return []
-
-# Инициализируем БД при запуске
-init_db()
+# ========== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАПУСКЕ ==========
+# Восстанавливаем БД из GitHub
+restore_db_from_github()
+# Экспортируем JSON для сайта
+export_to_json()
 
 def get_msk_time():
     return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
 
-# ========== КЛАВИАТУРЫ ==========
+# ========== КЛАВИАТУРЫ И КОМАНДЫ ==========
 def get_main_keyboard():
     buttons = [
         [InlineKeyboardButton(text="🌐 ПРОБИВ IP", callback_data="probe_ip")],
@@ -196,7 +259,6 @@ def get_main_keyboard():
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-# ========== АНИМАЦИЯ ПОДКЛЮЧЕНИЯ ==========
 async def show_connection_animation(message: types.Message):
     msg = await message.answer(
         "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
@@ -251,7 +313,7 @@ async def show_connection_animation(message: types.Message):
     
     return msg
 
-# ========== ФУНКЦИЯ ПРОБИВА IP ==========
+# ========== ПРОБИВ IP ==========
 async def probe_ip(ip: str):
     results = []
     success_count = 0
@@ -277,7 +339,6 @@ async def probe_ip(ip: str):
     
     return results, success_count
 
-# ========== ФУНКЦИЯ ПРОБИВА НОМЕРА ==========
 async def probe_phone(phone: str):
     results = []
     success_count = 0
@@ -344,7 +405,7 @@ def analyze_phone_results(results, local_data):
     
     return final
 
-# ========== КОМАНДА /START ==========
+# ========== КОМАНДЫ ==========
 @dp.message(Command("start"))
 async def start(message: types.Message):
     save_log({
@@ -363,7 +424,6 @@ async def start(message: types.Message):
         reply_markup=get_main_keyboard()
     )
 
-# ========== КОМАНДА /HELP ==========
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
     save_log({
@@ -387,7 +447,6 @@ async def help_command(message: types.Message):
         "/whois number 89001234567"
     )
 
-# ========== КОМАНДА /WHOIS ==========
 @dp.message(Command("whois"))
 async def whois_command(message: types.Message):
     args = message.text.split()
@@ -406,7 +465,6 @@ async def whois_command(message: types.Message):
     else:
         await message.answer("❌ Используйте: ip или number")
 
-# ========== ПРОБИВ IP ==========
 async def probe_ip_command(message: types.Message, ip: str):
     try:
         ipaddress.ip_address(ip)
@@ -444,7 +502,6 @@ async def probe_ip_command(message: types.Message, ip: str):
         f"📊 ОБРАБОТАНО: {success_count}/5 серверов"
     )
 
-# ========== ПРОБИВ НОМЕРА ==========
 async def probe_phone_command(message: types.Message, phone: str):
     save_log({
         "type": "probe",
@@ -480,10 +537,9 @@ async def probe_phone_command(message: types.Message, phone: str):
         f"📊 ОБРАБОТАНО: {success_count} серверов"
     )
 
-# ========== СТАТИСТИКА ==========
 @dp.message(Command("stats"))
 async def stats_command(message: types.Message):
-    stats = get_total_stats()
+    stats = get_stats()
     
     await message.answer(
         f"📊 СТАТИСТИКА\n\n"
@@ -512,7 +568,8 @@ async def handle_callback(callback: types.CallbackQuery):
 async def main():
     print("=" * 60)
     print("🔥 БОТ ЗАПУЩЕН!")
-    print("📌 База данных: logs.db (SQLite)")
+    print("📌 База данных: SQLite (logs.db)")
+    print("📌 JSON для сайта: logs.json (авто-экспорт)")
     print("📌 Команды: /start, /help, /whois ip, /whois number")
     print("=" * 60)
     
