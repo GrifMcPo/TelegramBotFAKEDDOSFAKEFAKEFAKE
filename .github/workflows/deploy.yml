@@ -4,16 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [ main, master ]
-    paths-ignore:
-      - 'docs/**'
-      - '*.html'
-      - '*.css'
-      - '*.js'
-      - 'README.md'
-
-concurrency:
-  group: bot-deploy
-  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -37,25 +27,15 @@ jobs:
     - name: 🔧 Create .env
       run: |
         echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" >> .env
-        echo "ADMIN_ID=${{ secrets.ADMIN_ID }}" >> .env
-        echo "GITHUB_TOKEN=${{ secrets.GH_TOKEN }}" >> .env
-    
-    - name: 📥 Restore database (if exists)
-      run: |
-        if [ -f "logs.db" ]; then
-          echo "✅ logs.db found, restoring..."
-        else
-          echo "📄 logs.db not found, will create new"
-        fi
     
     - name: 🤖 Run bot
       run: python bot.py
     
-    - name: 📤 Upload database as artifact
+    - name: 📤 Upload logs
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: bot-database
+        name: bot-data
         path: |
           logs.db
           logs.json
