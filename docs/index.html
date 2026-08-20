@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8"> 
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ADMIN PANEL — Логи бота</title>
     <link rel="stylesheet" href="style.css">
@@ -53,8 +53,8 @@
         <section id="tab-logs" class="tab-content active">
             <div class="container">
                 <div class="log-controls">
-                    <input type="text" id="searchLogs" placeholder="🔍 Поиск..." oninput="filterLogs()">
-                    <button onclick="loadData()" class="btn-refresh">🔄 Обновить</button>
+                    <input type="text" id="searchLogs" placeholder="🔍 Поиск по командам, пользователям..." oninput="filterLogs()">
+                    <button onclick="loadAllData()" class="btn-refresh">🔄 Обновить</button>
                     <span id="updateTime" class="update-time"></span>
                 </div>
                 <div class="logs-container" id="logsContainer">
@@ -92,7 +92,7 @@
                     </div>
                     <div class="stat-card">
                         <div class="stat-number" id="statLastUpdate">0</div>
-                        <div class="stat-label">🕐 Обновление</div>
+                        <div class="stat-label">🕐 Последнее обновление</div>
                     </div>
                 </div>
             </div>
@@ -106,7 +106,7 @@
                 <div class="blacklist-form">
                     <h3>➕ ДОБАВИТЬ В ЧЕРНЫЙ СПИСОК</h3>
                     <div class="form-group">
-                        <input type="text" id="blockUserId" placeholder="🆔 ID пользователя (например: 123456789)">
+                        <input type="text" id="blockUserId" placeholder="🆔 ID пользователя">
                         <input type="text" id="blockReason" placeholder="📌 Причина блокировки">
                         <button id="blockBtn" class="btn-primary">⛔ ЗАБЛОКИРОВАТЬ</button>
                     </div>
