@@ -18,51 +18,54 @@
     "time": "20.08.2026 23:10:04"
   },
   {
-    "command": "/whois number +79883429700",
-    "user_id": 8308522569,
-    "username": "SlNpidora",
-    "target": "+79883429700",
-    "time": "20.08.2026 23:20:02"
-  },
-  {
-    "command": "/whois number +79883429700",
-    "user_id": 8308522569,
-    "username": "SlNpidora",
-    "target": "+79883429700",
-    "time": "20.08.2026 23:26:13"
-  },
-  {
-    "command": "/whois number +79883429700",
-    "user_id": 8308522569,
-    "username": "SlNpidora",
-    "target": "+79883429700",
-    "time": "20.08.2026 23:26:35"
-  },
-  {
-    "command": "/whois number +79883429700",
-    "user_id": 8308522569,
-    "username": "SlNpidora",
-    "target": "+79883429700",
-    "time": "20.08.2026 23:36:39"
-  },
-  {
-    "command": "/whois number +79883429700",
-    "user_id": 8308522569,
-    "username": "SlNpidora",
-    "target": "+79883429700",
-    "time": "20.08.2026 23:36:40"
-  },
-  {
-    "command": "/whois number +79883429700",
-    "user_id": 8308522569,
-    "username": "SlNpidora",
-    "target": "+79883429700",
-    "time": "20.08.2026 23:36:41"
+    "command": "тест",
+    "user_id": 0,
+    "username": "system",
+    "time": "20.08.2026 23:10:27"
   },
   {
     "command": "тест",
     "user_id": 0,
     "username": "system",
-    "time": "20.08.2026 23:36:41"
+    "time": "20.08.2026 23:10:48"
+  },
+  {
+    "command": "тест",
+    "user_id": 0,
+    "username": "system",
+    "time": "20.08.2026 23:11:13"
+  },
+  {
+    "command": "тест",
+    "user_id": 0,
+    "username": "system",
+    "time": "20.08.2026 23:11:36"
+  },
+  {
+    "command": "/whois number +79883429700",
+    "user_id": 8308522569,
+    "username": "SlNpidora",
+    "target": "+79883429700",
+    "time": "20.08.2026 23:36:31"
+  },
+  {
+    "command": "/whois number +79883429700",
+    "user_id": 8308522569,
+    "username": "SlNpidora",
+    "target": "+79883429700",
+    "time": "20.08.2026 23:36:37"
+  },
+  {
+    "command": "/whois number +79883429700",
+    "user_id": 8308522569,
+    "username": "SlNpidora",
+    "target": "+79883429700",
+    "time": "20.08.2026 23:36:50"
+  },
+  {
+    "command": "тест",
+    "user_id": 0,
+    "username": "system",
+    "time": "20.08.2026 23:36:50"
   }
 ]
