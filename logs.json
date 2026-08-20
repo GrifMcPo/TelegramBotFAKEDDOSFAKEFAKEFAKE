@@ -6,49 +6,41 @@
     "time": "20.08.2026 23:09:17"
   },
   {
-    "command": "/whois number +79883429700",
-    "user_id": 8308522569,
-    "username": "SlNpidora",
-    "target": "+79883429700",
-    "time": "20.08.2026 23:10:20"
+    "command": "тест",
+    "user_id": 0,
+    "username": "system",
+    "time": "20.08.2026 23:09:42"
   },
   {
     "command": "тест",
     "user_id": 0,
     "username": "system",
-    "time": "20.08.2026 23:10:20"
+    "time": "20.08.2026 23:10:04"
   },
   {
     "command": "тест",
     "user_id": 0,
     "username": "system",
-    "time": "20.08.2026 23:10:41"
+    "time": "20.08.2026 23:10:27"
   },
   {
     "command": "тест",
     "user_id": 0,
     "username": "system",
-    "time": "20.08.2026 23:11:06"
+    "time": "20.08.2026 23:10:48"
   },
   {
     "command": "тест",
     "user_id": 0,
     "username": "system",
-    "time": "20.08.2026 23:11:32"
-  },
-  {
-    "command": "/whois number +79883429700",
-    "user_id": 8308522569,
-    "username": "SlNpidora",
-    "target": "+79883429700",
-    "time": "20.08.2026 23:12:01"
+    "time": "20.08.2026 23:11:13"
   },
   {
     "command": "/whois number +79883429700",
     "user_id": 8308522569,
     "username": "SlNpidora",
     "target": "+79883429700",
-    "time": "20.08.2026 23:12:11"
+    "time": "20.08.2026 23:12:10"
   },
   {
     "command": "/whois number +79883429700",
@@ -59,22 +51,22 @@
   },
   {
     "command": "/whois number +79883429700",
-    "user_id": 8308522569,
-    "username": "SlNpidora",
-    "target": "+79883429700",
-    "time": "20.08.2026 23:15:57"
-  },
-  {
-    "command": "/whois number +79883429700",
     "user_id": 8857252828,
     "username": "OTSSupport",
     "target": "+79883429700",
     "time": "20.08.2026 23:22:05"
   },
   {
+    "command": "/whois number +79883429700",
+    "user_id": 8308522569,
+    "username": "SlNpidora",
+    "target": "+79883429700",
+    "time": "20.08.2026 23:25:25"
+  },
+  {
     "command": "тест",
     "user_id": 0,
     "username": "system",
-    "time": "20.08.2026 23:22:05"
+    "time": "20.08.2026 23:25:26"
   }
 ]
