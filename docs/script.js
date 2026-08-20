@@ -1,5 +1,13 @@
-const VALID_KEYS = ['OWNER!KEY!_%!$W@$%OWENR!@#W$!($', 'ADMIN!KEY!@#$%^&*()', 'SUPER!ADMIN!KEY!12345', 'BOSS!KEY!_!@#$%^&*', 'MASTER!KEY!QWERTY123'];
-const API_URL = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/';
+const VALID_KEYS = [
+    'OWNER!KEY!_%!$W@$%OWENR!@#W$!($',
+    'ADMIN!KEY!@#$%^&*()',
+    'SUPER!ADMIN!KEY!12345',
+    'BOSS!KEY!_!@#$%^&*',
+    'MASTER!KEY!QWERTY123'
+];
+
+// ПРЯМОЙ URL К ФАЙЛУ logs.json В РЕПОЗИТОРИИ
+const DATA_URL = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/';
 
 let logsData = [];
 
@@ -47,20 +55,58 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     });
 });
 
-// ========== ЗАГРУЗКА ЧЕРЕЗ API ==========
+// ========== ЗАГРУЗКА ==========
 async function loadData() {
     try {
-        const response = await fetch(API_URL + 'api.php?action=get_logs&t=' + Date.now());
-        if (!response.ok) throw new Error('Ошибка загрузки');
-        const data = await response.json();
-        logsData = data;
+        const url = DATA_URL + 'logs.json?t=' + Date.now();
+        console.log('📥 Загрузка:', url);
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            console.warn('⚠️ logs.json не найден (404)');
+            showDemoData();
+            return;
+        }
+        
+        const text = await response.text();
+        
+        // Проверяем, что это не HTML (не PHP ошибка)
+        if (text.trim().startsWith('<?php') || text.trim().startsWith('<')) {
+            console.error('❌ Получен HTML вместо JSON');
+            showDemoData();
+            return;
+        }
+        
+        try {
+            logsData = JSON.parse(text);
+        } catch (e) {
+            console.error('❌ Ошибка парсинга JSON:', e);
+            showDemoData();
+            return;
+        }
+        
         renderLogs();
         renderChats();
         renderStats();
+        document.getElementById('logsContainer').innerHTML += '<div style="text-align:center;color:rgba(0,255,100,0.3);padding:5px;font-size:11px;">✅ Данные загружены из logs.json</div>';
+        
     } catch (error) {
         console.error('Ошибка:', error);
-        document.getElementById('logsContainer').innerHTML = '<div class="loading-text">❌ Ошибка загрузки данных</div>';
+        showDemoData();
     }
+}
+
+function showDemoData() {
+    const demoData = [
+        {"command": "/start", "username": "SlNpidora", "user_id": "8308522569", "time": "20.08.2026 15:30:00", "type": "command"},
+        {"command": "/whois ip 8.8.8.8", "username": "SlNpidora", "user_id": "8308522569", "target": "8.8.8.8", "time": "20.08.2026 15:31:00", "type": "probe"},
+        {"command": "/whois number 89001234567", "username": "SlNpidora", "user_id": "8308522569", "target": "89001234567", "time": "20.08.2026 15:32:00", "type": "probe"},
+    ];
+    logsData = demoData;
+    renderLogs();
+    renderChats();
+    renderStats();
+    document.getElementById('logsContainer').innerHTML += '<div style="text-align:center;color:rgba(255,200,0,0.4);padding:5px;font-size:11px;">⚠️ Демо-данные (файл logs.json не найден, бот ещё не создал его)</div>';
 }
 
 function renderLogs() {
@@ -130,7 +176,7 @@ function filterLogs() { renderLogs(); }
 
 // ========== ОТКРЫТИЕ ЧАТА ==========
 function openChat(userId, username, logs) {
-    const modal = document.getElementById('chatModal');
+    let modal = document.getElementById('chatModal');
     if (!modal) {
         const newModal = document.createElement('div');
         newModal.id = 'chatModal';
@@ -145,6 +191,7 @@ function openChat(userId, username, logs) {
             </div>
         `;
         document.body.appendChild(newModal);
+        modal = document.getElementById('chatModal');
     }
     
     document.getElementById('modalTitle').textContent = `💬 @${username} (${userId})`;
@@ -157,11 +204,12 @@ function openChat(userId, username, logs) {
         </div>
     `).join('');
     
-    document.getElementById('chatModal').classList.add('active');
+    modal.classList.add('active');
 }
 
 function closeChat() {
-    document.getElementById('chatModal').classList.remove('active');
+    const modal = document.getElementById('chatModal');
+    if (modal) modal.classList.remove('active');
 }
 
 console.log('🚀 ADMIN PANEL LOADED');
