@@ -1,26 +1,9 @@
-// ============================================================
-// КЛЮЧИ ДОСТУПА
-// ============================================================
-const VALID_KEYS = [
-    'OWNER!KEY!_%!$W@$%OWENR!@#W$!($',
-    'ADMIN!KEY!@#$%^&*()',
-    'SUPER!ADMIN!KEY!12345',
-    'BOSS!KEY!_!@#$%^&*',
-    'MASTER!KEY!QWERTY123'
-];
+const VALID_KEYS = ['OWNER!KEY!_%!$W@$%OWENR!@#W$!($', 'ADMIN!KEY!@#$%^&*()', 'SUPER!ADMIN!KEY!12345', 'BOSS!KEY!_!@#$%^&*', 'MASTER!KEY!QWERTY123'];
+const DATA_URL = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/';
 
-// ============================================================
-// URL ДЛЯ ДАННЫХ
-// ============================================================
-// Используем raw.githubusercontent.com для доступа к файлам
-const REPO_OWNER = 'GrifMcPo';
-const REPO_NAME = 'TelegramBotFAKEDDOSFAKEFAKEFAKE';
-const BRANCH = 'main';
-const DATA_URL = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/`;
+let logsData = [];
 
-// ============================================================
-// ЭЛЕМЕНТЫ
-// ============================================================
+// ========== ВХОД ==========
 const loginPage = document.getElementById('loginPage');
 const mainPage = document.getElementById('mainPage');
 const keyInput = document.getElementById('keyInput');
@@ -28,18 +11,14 @@ const loginBtn = document.getElementById('loginBtn');
 const loginError = document.getElementById('loginError');
 const logoutBtn = document.getElementById('logoutBtn');
 
-// ============================================================
-// ВХОД
-// ============================================================
 function login() {
     const key = keyInput.value.trim();
     if (VALID_KEYS.includes(key)) {
         loginPage.style.display = 'none';
         mainPage.style.display = 'block';
         loginError.classList.remove('show');
-        loadAllData();
-        // Автообновление каждые 15 секунд
-        setInterval(loadAllData, 15000);
+        loadData();
+        setInterval(loadData, 15000);
     } else {
         loginError.classList.add('show');
         keyInput.value = '';
@@ -55,12 +34,9 @@ logoutBtn.addEventListener('click', () => {
     mainPage.style.display = 'none';
     loginPage.style.display = 'flex';
     keyInput.value = '';
-    keyInput.focus();
 });
 
-// ============================================================
-// ТАБЫ
-// ============================================================
+// ========== ТАБЫ ==========
 document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -71,132 +47,121 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     });
 });
 
-// ============================================================
-// ЗАГРУЗКА ДАННЫХ
-// ============================================================
-async function loadAllData() {
-    await Promise.all([loadUsers(), loadStats(), loadChats()]);
-}
-
-async function loadUsers() {
+// ========== ЗАГРУЗКА ==========
+async function loadData() {
     try {
-        const url = DATA_URL + 'users.json?t=' + Date.now();
-        console.log('📥 Загрузка users.json:', url);
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            console.warn('⚠️ users.json не найден (бот ещё не запускался)');
-            document.getElementById('usersTableBody').innerHTML = '<tr><td colspan="4" class="loading-text">📭 Нет данных (бот ещё не запускался)</td></tr>';
-            return;
-        }
-        
-        const data = await response.json();
-        console.log('✅ users.json загружен:', Object.keys(data).length, 'пользователей');
-        
-        const userIds = Object.keys(data);
-        document.getElementById('statUsers').textContent = userIds.length;
-        document.getElementById('statUptime').textContent = new Date().toLocaleTimeString('ru-RU');
-        
-        const tbody = document.getElementById('usersTableBody');
-        if (userIds.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="loading-text">📭 Нет подключенных пользователей</td></tr>';
-            return;
-        }
-        
-        tbody.innerHTML = userIds.map((id, i) => {
-            const user = data[id];
-            return `<tr><td>${i+1}</td><td>${id}</td><td>@${user.username || 'Нет'}</td><td>${user.connected_at || 'Неизвестно'}</td></tr>`;
-        }).join('');
-        
+        const response = await fetch(DATA_URL + 'logs.json?t=' + Date.now());
+        if (!response.ok) throw new Error('logs.json не найден');
+        logsData = await response.json();
+        renderLogs();
+        renderChats();
+        renderStats();
     } catch (error) {
-        console.error('❌ Ошибка загрузки users.json:', error);
-        document.getElementById('usersTableBody').innerHTML = '<tr><td colspan="4" class="loading-text">❌ Ошибка загрузки</td></tr>';
+        console.error('Ошибка:', error);
+        document.getElementById('logsContainer').innerHTML = '<div class="loading-text">❌ Ошибка загрузки данных</div>';
     }
 }
 
-async function loadStats() {
-    try {
-        const url = DATA_URL + 'stats.json?t=' + Date.now();
-        console.log('📥 Загрузка stats.json:', url);
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            console.warn('⚠️ stats.json не найден');
-            document.getElementById('statCommands').textContent = '0';
-            document.getElementById('statStatus').textContent = '⏳ Ожидание';
-            return;
-        }
-        
-        const data = await response.json();
-        console.log('✅ stats.json загружен');
-        document.getElementById('statCommands').textContent = data.total_commands || 0;
-        document.getElementById('statStatus').textContent = data.total_connections > 0 ? '🟢 Онлайн' : '🔴 Оффлайн';
-        
-    } catch (error) {
-        console.error('❌ Ошибка загрузки stats.json:', error);
-        document.getElementById('statCommands').textContent = '0';
-        document.getElementById('statStatus').textContent = '⏳ Ожидание';
+function renderLogs() {
+    const container = document.getElementById('logsContainer');
+    const search = document.getElementById('searchLogs').value.toLowerCase();
+    
+    const filtered = logsData.filter(log => 
+        (log.command || '').toLowerCase().includes(search) ||
+        (log.username || '').toLowerCase().includes(search) ||
+        (log.target || '').toLowerCase().includes(search)
+    );
+    
+    if (!filtered.length) {
+        container.innerHTML = '<div class="loading-text">📭 Нет записей</div>';
+        return;
     }
+    
+    container.innerHTML = filtered.slice().reverse().map(log => `
+        <div class="log-entry">
+            <div class="log-header">
+                <span class="log-user">👤 ${log.username || 'Нет'} (${log.user_id || '?'})</span>
+                <span class="log-time">${log.time || ''}</span>
+            </div>
+            <div class="log-command">📝 ${log.command || 'Неизвестно'}</div>
+            ${log.target ? `<div class="log-target">🎯 ${log.target}</div>` : ''}
+        </div>
+    `).join('');
 }
 
-async function loadChats() {
-    try {
-        const url = DATA_URL + 'users.json?t=' + Date.now();
-        console.log('📥 Загрузка чатов из users.json');
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            document.getElementById('chatsContainer').innerHTML = '<div class="loading-text">📭 Нет данных (бот ещё не запускался)</div>';
-            return;
-        }
-        
-        const data = await response.json();
-        const container = document.getElementById('chatsContainer');
-        const userIds = Object.keys(data);
-        
-        if (userIds.length === 0) {
-            container.innerHTML = '<div class="loading-text">📭 Нет чатов</div>';
-            return;
-        }
-        
-        container.innerHTML = userIds.map((id) => {
-            const user = data[id];
-            return `
-                <div class="chat-card" onclick="showChatInfo('${id}')">
-                    <div class="chat-username">@${user.username || 'Нет'}</div>
-                    <div class="chat-id">🆔 ${id}</div>
-                    <div class="chat-connected">📅 ${user.connected_at || 'Неизвестно'}</div>
-                    <div class="chat-commands">📝 ${user.commands || 0} команд</div>
-                    <span class="chat-status online">🟢 Активен</span>
+function renderChats() {
+    const container = document.getElementById('chatsContainer');
+    const users = {};
+    
+    logsData.forEach(log => {
+        const id = log.user_id;
+        if (!users[id]) users[id] = { username: log.username || 'Нет', full_name: log.full_name || 'Нет', count: 0, logs: [] };
+        users[id].count++;
+        users[id].logs.push(log);
+    });
+    
+    const entries = Object.entries(users);
+    if (!entries.length) {
+        container.innerHTML = '<div class="loading-text">📭 Нет пользователей</div>';
+        return;
+    }
+    
+    container.innerHTML = entries.map(([id, data]) => `
+        <div class="chat-card" onclick="openChat('${id}', '${data.username}', ${JSON.stringify(data.logs).replace(/"/g, '&quot;')})">
+            <div class="chat-username">👤 ${data.username}</div>
+            <div class="chat-id">🆔 ${id}</div>
+            <div class="chat-count">📝 ${data.count} команд</div>
+            <div class="chat-last">🕐 ${data.logs[data.logs.length-1]?.time || 'Нет'}</div>
+        </div>
+    `).join('');
+}
+
+function renderStats() {
+    const users = new Set(logsData.map(l => l.user_id));
+    const probes = logsData.filter(l => l.type === 'probe');
+    document.getElementById('statUsers').textContent = users.size;
+    document.getElementById('statCommands').textContent = logsData.length;
+    document.getElementById('statProbes').textContent = probes.length;
+    document.getElementById('statTime').textContent = new Date().toLocaleTimeString('ru-RU');
+}
+
+function filterLogs() { renderLogs(); }
+
+// ========== ОТКРЫТИЕ ЧАТА ==========
+function openChat(userId, username, logs) {
+    const modal = document.getElementById('chatModal');
+    if (!modal) {
+        const newModal = document.createElement('div');
+        newModal.id = 'chatModal';
+        newModal.className = 'chat-modal';
+        newModal.innerHTML = `
+            <div class="chat-modal-content">
+                <div class="modal-header">
+                    <h2 id="modalTitle">💬 Чат с пользователем</h2>
+                    <button class="modal-close" onclick="closeChat()">✕</button>
                 </div>
-            `;
-        }).join('');
-        
-    } catch (error) {
-        console.error('❌ Ошибка загрузки чатов:', error);
-        document.getElementById('chatsContainer').innerHTML = '<div class="loading-text">❌ Ошибка загрузки</div>';
+                <div id="modalMessages"></div>
+            </div>
+        `;
+        document.body.appendChild(newModal);
     }
+    
+    document.getElementById('modalTitle').textContent = `💬 @${username} (${userId})`;
+    const container = document.getElementById('modalMessages');
+    container.innerHTML = logs.slice().reverse().map(log => `
+        <div class="modal-message">
+            <div class="msg-time">${log.time || ''}</div>
+            <div class="msg-command">📝 ${log.command || 'Неизвестно'}</div>
+            ${log.target ? `<div class="msg-target">🎯 ${log.target}</div>` : ''}
+        </div>
+    `).join('');
+    
+    document.getElementById('chatModal').classList.add('active');
 }
 
-function showChatInfo(chatId) {
-    alert(`📊 ИНФОРМАЦИЯ О ЧАТЕ\n\n🆔 ID: ${chatId}\n📌 Данные загружаются...\n🕐 ${new Date().toLocaleString('ru-RU')}`);
+function closeChat() {
+    document.getElementById('chatModal').classList.remove('active');
 }
 
-// ============================================================
-// СТАТУС БОТА ПРОВЕРЯЕМ ЧЕРЕЗ HEADERS
-// ============================================================
-async function checkBotStatus() {
-    try {
-        const response = await fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/getMe');
-        if (response.ok) {
-            document.getElementById('statStatus').textContent = '🟢 Онлайн';
-        } else {
-            document.getElementById('statStatus').textContent = '🔴 Оффлайн';
-        }
-    } catch {
-        document.getElementById('statStatus').textContent = '🔴 Оффлайн';
-    }
-}
-
-console.log('🚀 ADMIN BOT PANEL LOADED');
-console.log('📌 Для входа используй один из 5 ключей');
+// ========== ИНИЦИАЛИЗАЦИЯ ==========
+console.log('🚀 ADMIN PANEL LOADED');
