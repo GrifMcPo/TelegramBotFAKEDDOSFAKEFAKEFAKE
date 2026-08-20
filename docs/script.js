@@ -91,11 +91,16 @@ async function loadLogs() {
 async function loadBlacklist() {
     try {
         const response = await fetch(DATA_URL + 'blacklist.json?t=' + Date.now());
-        if (!response.ok) throw new Error('blacklist.json не найден');
+        if (!response.ok) {
+            console.warn('⚠️ blacklist.json не найден');
+            blacklistData = {};
+            renderBlacklist();
+            return;
+        }
         blacklistData = await response.json();
         renderBlacklist();
     } catch (error) {
-        console.error('Ошибка загрузки черного списка:', error);
+        console.warn('⚠️ Ошибка загрузки черного списка:', error);
         blacklistData = {};
         renderBlacklist();
     }
@@ -104,12 +109,12 @@ async function loadBlacklist() {
 function renderBlacklist() {
     const container = document.getElementById('blacklistContainer');
     const entries = Object.entries(blacklistData);
-    
+
     if (!entries.length) {
         container.innerHTML = '<div class="loading-text">📭 Черный список пуст</div>';
         return;
     }
-    
+
     container.innerHTML = entries.map(([userId, data]) => `
         <div class="blacklist-entry">
             <div class="entry-header">
@@ -124,8 +129,10 @@ function renderBlacklist() {
 
 function showDemoData() {
     logsData = [
-        {"command": "/start", "username": "SlNpidora", "user_id": "8308522569", "time": "20.08.2026 15:30:00", "type": "command"},
-        {"command": "/whois ip 8.8.8.8", "username": "SlNpidora", "user_id": "8308522569", "target": "8.8.8.8", "time": "20.08.2026 15:31:00", "type": "probe"},
+        { "command": "/start", "username": "SlNpidora", "user_id": "8308522569", "time": "20.08.2026 15:30:00",
+            "type": "command" },
+        { "command": "/whois ip 8.8.8.8", "username": "SlNpidora", "user_id": "8308522569", "target": "8.8.8.8",
+            "time": "20.08.2026 15:31:00", "type": "probe" },
     ];
     renderLogs();
     renderChats();
@@ -135,18 +142,18 @@ function showDemoData() {
 function renderLogs() {
     const container = document.getElementById('logsContainer');
     const search = document.getElementById('searchLogs').value.toLowerCase();
-    
-    const filtered = logsData.filter(log => 
+
+    const filtered = logsData.filter(log =>
         (log.command || '').toLowerCase().includes(search) ||
         (log.username || '').toLowerCase().includes(search) ||
         (log.target || '').toLowerCase().includes(search)
     );
-    
+
     if (!filtered.length) {
         container.innerHTML = '<div class="loading-text">📭 Нет записей</div>';
         return;
     }
-    
+
     container.innerHTML = filtered.slice().reverse().map(log => `
         <div class="log-entry">
             <div class="log-header">
@@ -163,26 +170,26 @@ function renderLogs() {
 function renderChats() {
     const container = document.getElementById('chatsContainer');
     const users = {};
-    
+
     logsData.forEach(log => {
         const id = log.user_id;
         if (!users[id]) users[id] = { username: log.username || 'Нет', count: 0, logs: [] };
         users[id].count++;
         users[id].logs.push(log);
     });
-    
+
     const entries = Object.entries(users);
     if (!entries.length) {
         container.innerHTML = '<div class="loading-text">📭 Нет пользователей</div>';
         return;
     }
-    
+
     container.innerHTML = entries.map(([id, data]) => `
         <div class="chat-card" onclick="openChat('${id}', '${data.username}', ${JSON.stringify(data.logs).replace(/"/g, '&quot;')})">
             <div class="chat-username">👤 ${data.username}</div>
             <div class="chat-id">🆔 ${id}</div>
             <div class="chat-count">📝 ${data.count} команд</div>
-            <div class="chat-last">🕐 ${data.logs[data.logs.length-1]?.time || 'Нет'}</div>
+            <div class="chat-last">🕐 ${data.logs[data.logs.length - 1]?.time || 'Нет'}</div>
         </div>
     `).join('');
 }
@@ -217,7 +224,7 @@ function openChat(userId, username, logs) {
         document.body.appendChild(newModal);
         modal = document.getElementById('chatModal');
     }
-    
+
     document.getElementById('modalTitle').textContent = `💬 @${username} (${userId})`;
     const container = document.getElementById('modalMessages');
     container.innerHTML = logs.slice().reverse().map(log => `
@@ -227,7 +234,7 @@ function openChat(userId, username, logs) {
             ${log.target ? `<div class="msg-target">🎯 ${log.target}</div>` : ''}
         </div>
     `).join('');
-    
+
     modal.classList.add('active');
 }
 
@@ -236,48 +243,52 @@ function closeChat() {
     if (modal) modal.classList.remove('active');
 }
 
+// ========== АЛИАС ДЛЯ КНОПКИ ОБНОВЛЕНИЯ ==========
+function loadData() {
+    loadAllData();
+}
+
 // ========== ЧЕРНЫЙ СПИСОК (ДОБАВЛЕНИЕ/УДАЛЕНИЕ) ==========
 document.getElementById('blockBtn').addEventListener('click', async function() {
     const userId = document.getElementById('blockUserId').value.trim();
     const reason = document.getElementById('blockReason').value.trim();
     const messageDiv = document.getElementById('blockMessage');
-    
+
     if (!userId) {
         messageDiv.textContent = '❌ Введите ID пользователя!';
         messageDiv.className = 'message error';
         return;
     }
-    
+
     if (!reason) {
         messageDiv.textContent = '❌ Введите причину блокировки!';
         messageDiv.className = 'message error';
         return;
     }
-    
-    // Отправляем запрос к боту через GitHub
+
     try {
         const response = await fetch(API_URL + 'blacklist.json', {
             method: 'GET',
             headers: { 'Accept': 'application/vnd.github.v3+json' }
         });
-        
+
         let sha = null;
         let content = {};
-        
+
         if (response.status === 200) {
             const data = await response.json();
             sha = data.sha;
             content = JSON.parse(atob(data.content));
         }
-        
+
         content[userId] = {
             reason: reason,
             added_by: 'Админ (сайт)',
             added_at: new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })
         };
-        
+
         const encoded = btoa(JSON.stringify(content, null, 2));
-        
+
         const updateResponse = await fetch(API_URL + 'blacklist.json', {
             method: 'PUT',
             headers: {
@@ -292,7 +303,7 @@ document.getElementById('blockBtn').addEventListener('click', async function() {
                 branch: 'main'
             })
         });
-        
+
         if (updateResponse.status === 200 || updateResponse.status === 201) {
             messageDiv.textContent = `✅ Пользователь ${userId} добавлен в черный список!`;
             messageDiv.className = 'message success';
@@ -313,37 +324,37 @@ document.getElementById('blockBtn').addEventListener('click', async function() {
 document.getElementById('unblockBtn').addEventListener('click', async function() {
     const userId = document.getElementById('unblockUserId').value.trim();
     const messageDiv = document.getElementById('unblockMessage');
-    
+
     if (!userId) {
         messageDiv.textContent = '❌ Введите ID пользователя!';
         messageDiv.className = 'message error';
         return;
     }
-    
+
     try {
         const response = await fetch(API_URL + 'blacklist.json', {
             method: 'GET',
             headers: { 'Accept': 'application/vnd.github.v3+json' }
         });
-        
+
         let sha = null;
         let content = {};
-        
+
         if (response.status === 200) {
             const data = await response.json();
             sha = data.sha;
             content = JSON.parse(atob(data.content));
         }
-        
+
         if (!content[userId]) {
             messageDiv.textContent = `❌ Пользователь ${userId} не найден в черном списке!`;
             messageDiv.className = 'message error';
             return;
         }
-        
+
         delete content[userId];
         const encoded = btoa(JSON.stringify(content, null, 2));
-        
+
         const updateResponse = await fetch(API_URL + 'blacklist.json', {
             method: 'PUT',
             headers: {
@@ -358,7 +369,7 @@ document.getElementById('unblockBtn').addEventListener('click', async function()
                 branch: 'main'
             })
         });
-        
+
         if (updateResponse.status === 200 || updateResponse.status === 201) {
             messageDiv.textContent = `✅ Пользователь ${userId} удален из черного списка!`;
             messageDiv.className = 'message success';
