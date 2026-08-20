@@ -1,15 +1,15 @@
-name: 🚀 Deploy Business Bot
+name: 🚀 Deploy Bot
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main, master ]
-  workflow_dispatch:
-  schedule:
-    - cron: '0 */6 * * *'
-
-concurrency:
-  group: bot-deploy
-  cancel-in-progress: true
+    paths-ignore:
+      - 'docs/**'
+      - '*.html'
+      - '*.css'
+      - '*.js'
+      - 'README.md'
 
 jobs:
   deploy:
@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 360
     
     steps:
-    - name: 📥 Checkout code
+    - name: 📥 Checkout
       uses: actions/checkout@v4
     
     - name: 🐍 Setup Python
@@ -30,11 +30,10 @@ jobs:
         pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: 🔧 Create .env file from secrets
+    - name: 🔧 Create .env
       run: |
         echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" >> .env
-        echo "GITHUB_TOKEN=${{ secrets.GH_TOKEN }}" >> .env
-        echo "✅ .env created"
+        echo "ADMIN_ID=${{ secrets.ADMIN_ID }}" >> .env
     
     - name: 🤖 Run bot
       run: python bot.py
