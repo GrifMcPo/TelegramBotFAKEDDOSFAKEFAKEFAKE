@@ -7,19 +7,19 @@ import requests
 import json
 import ipaddress
 import phonenumbers
-from phonenumbers import carrier, geocoder, timezone, number_type
-from datetime import datetime
+from phonenumbers import carrier, geocoder, timezone
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# ========== НАСТРОЙКА ==========
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "8857252828"))
 
 if not BOT_TOKEN:
     print("❌ Токен не найден!")
@@ -28,23 +28,24 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ========== БАЗЫ ДЛЯ ПРОВЕРКИ IP ==========
-IP_SOURCES = [
-    {"name": "Сервер #1", "url": "http://ip-api.com/json/{}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,isp,org,as,asname,timezone,query"},
-    {"name": "Сервер #2", "url": "https://ipinfo.io/{}/json"},
-    {"name": "Сервер #3", "url": "http://ipwhois.io/json/{}"},
-    {"name": "Сервер #4", "url": "https://freegeoip.app/json/{}"},
-    {"name": "Сервер #5", "url": "https://ipapi.co/{}/json"},
-]
+# ========== ФАЙЛ ДЛЯ ЛОГОВ ==========
+LOGS_FILE = "logs.json"
 
-# ========== БАЗЫ ДЛЯ ПРОВЕРКИ НОМЕРА ==========
-PHONE_SOURCES = [
-    {"name": "Сервер #1", "type": "local"},
-    {"name": "Сервер #2", "url": "https://api.numverify.com/validate?number={}&access_key=YOUR_KEY"},
-    {"name": "Сервер #3", "url": "https://phonevalidation.abstractapi.com/v1/?api_key=YOUR_KEY&phone={}"},
-    {"name": "Сервер #4", "url": "https://api.veriphone.io/v2/verify?phone={}&api_key=YOUR_KEY"},
-    {"name": "Сервер #5", "url": "https://api.apilayer.com/number_verification/validate?number={}"},
-]
+def load_logs():
+    try:
+        with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_log(log_entry):
+    logs = load_logs()
+    logs.append(log_entry)
+    with open(LOGS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(logs, f, indent=2, ensure_ascii=False)
+
+def get_msk_time():
+    return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
 
 # ========== КЛАВИАТУРЫ ==========
 def get_main_keyboard():
@@ -60,17 +61,22 @@ async def probe_ip(ip: str):
     results = []
     success_count = 0
     
-    for source in IP_SOURCES:
+    sources = [
+        {"name": "Сервер #1", "url": "http://ip-api.com/json/{}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,isp,org,as,asname,timezone,query"},
+        {"name": "Сервер #2", "url": "https://ipinfo.io/{}/json"},
+        {"name": "Сервер #3", "url": "http://ipwhois.io/json/{}"},
+        {"name": "Сервер #4", "url": "https://freegeoip.app/json/{}"},
+        {"name": "Сервер #5", "url": "https://ipapi.co/{}/json"},
+    ]
+    
+    for source in sources:
         try:
             url = source["url"].format(ip)
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 success_count += 1
-                results.append({
-                    "source": source["name"],
-                    "data": data
-                })
+                results.append({"source": source["name"], "data": data})
         except:
             pass
     
@@ -82,91 +88,40 @@ async def probe_phone(phone: str):
     success_count = 0
     local_data = None
     
-    # Очищаем номер
     phone_clean = phone.replace('+', '').replace('-', '').replace('(', '').replace(')', '').replace(' ', '')
     
-    # Локальная проверка через phonenumbers
     try:
         parsed = phonenumbers.parse(phone_clean, None)
-        if not phonenumbers.is_valid_number(parsed):
-            return [], 0, {"error": "Номер не найден в базе"}
-        
-        operator = carrier.name_for_number(parsed, "ru") or "Не определено"
-        region = geocoder.description_for_number(parsed, "ru") or "Не определено"
-        timezone_info = timezone.time_zones_for_number(parsed)
-        phone_type = phonenumbers.number_type(parsed)
-        formatted = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
-        national = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.NATIONAL)
-        
-        type_names = {
-            0: "Неизвестный",
-            1: "Стационарный",
-            2: "Мобильный",
-            3: "Стационарный (набор)",
-            4: "VoIP",
-            5: "Личный номер",
-            6: "Универсальный",
-            7: "Pager"
-        }
-        
-        local_data = {
-            "source": "Сервер #1",
-            "formatted": formatted,
-            "national": national,
-            "operator": operator,
-            "region": region,
-            "timezone": ', '.join(timezone_info) if timezone_info else "Не определено",
-            "type": type_names.get(phone_type, "Неизвестный"),
-            "valid": True,
-            "country_code": str(parsed.country_code)
-        }
-        results.append(local_data)
-        success_count += 1
+        if phonenumbers.is_valid_number(parsed):
+            operator = carrier.name_for_number(parsed, "ru") or "Не определено"
+            region = geocoder.description_for_number(parsed, "ru") or "Не определено"
+            timezone_info = timezone.time_zones_for_number(parsed)
+            phone_type = phonenumbers.number_type(parsed)
+            formatted = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
+            national = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.NATIONAL)
+            
+            type_names = {0: "Неизвестный", 1: "Стационарный", 2: "Мобильный", 3: "Стационарный (набор)", 4: "VoIP", 5: "Личный номер", 6: "Универсальный", 7: "Pager"}
+            
+            local_data = {
+                "source": "Сервер #1",
+                "formatted": formatted,
+                "national": national,
+                "operator": operator,
+                "region": region,
+                "timezone": ', '.join(timezone_info) if timezone_info else "Не определено",
+                "type": type_names.get(phone_type, "Неизвестный"),
+                "country_code": str(parsed.country_code)
+            }
+            results.append(local_data)
+            success_count += 1
     except:
         pass
     
-    # Внешние API
-    for source in PHONE_SOURCES:
-        if source.get("type") == "local":
-            continue
-        try:
-            url = source["url"].format(phone_clean)
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                success_count += 1
-                results.append({
-                    "source": source["name"],
-                    "data": data
-                })
-        except:
-            pass
-    
     return results, success_count, local_data
 
-# ========== АНАЛИЗ ДАННЫХ IP ==========
 def analyze_ip_results(results):
-    final = {
-        "country": "Не определено",
-        "region": "Не определено",
-        "city": "Не определено",
-        "isp": "Не определено",
-        "org": "Не определено",
-        "as": "Не определено",
-        "timezone": "Не определено"
-    }
-    
-    field_map = {
-        "country": ["country", "country_name", "countryCode"],
-        "region": ["region", "regionName", "region_name"],
-        "city": ["city", "city_name"],
-        "isp": ["isp", "org"],
-        "org": ["org", "organization"],
-        "as": ["as", "asn"],
-        "timezone": ["timezone", "time_zone"]
-    }
-    
-    # Собираем все значения
+    final = {"country": "Не определено", "region": "Не определено", "city": "Не определено", "isp": "Не определено", "org": "Не определено", "as": "Не определено", "timezone": "Не определено"}
+    field_map = {"country": ["country", "country_name", "countryCode"], "region": ["region", "regionName", "region_name"], "city": ["city", "city_name"], "isp": ["isp", "org"], "org": ["org", "organization"], "as": ["as", "asn"], "timezone": ["timezone", "time_zone"]}
     values = {key: [] for key in final.keys()}
     
     for result in results:
@@ -177,69 +132,39 @@ def analyze_ip_results(results):
                     values[field].append(data[alias])
                     break
     
-    # Выбираем самое частое
     from collections import Counter
     for field, vals in values.items():
         if vals:
-            counter = Counter(vals)
-            final[field] = counter.most_common(1)[0][0]
+            final[field] = Counter(vals).most_common(1)[0][0]
     
     return final
 
-# ========== АНАЛИЗ ДАННЫХ НОМЕРА ==========
 def analyze_phone_results(results, local_data):
-    final = {
-        "formatted": "Не определено",
-        "national": "Не определено",
-        "operator": "Не определено",
-        "region": "Не определено",
-        "timezone": "Не определено",
-        "type": "Не определено",
-        "country_code": "Не определено"
-    }
+    final = {"formatted": "Не определено", "national": "Не определено", "operator": "Не определено", "region": "Не определено", "timezone": "Не определено", "type": "Не определено", "country_code": "Не определено"}
     
-    # Сначала берем локальные данные как основные
     if local_data:
         for key in final.keys():
             if key in local_data:
                 final[key] = local_data[key]
-    
-    # Дополняем из внешних источников
-    for result in results:
-        if "data" not in result:
-            continue
-        data = result["data"]
-        
-        # Пытаемся найти оператора
-        if final["operator"] == "Не определено" or final["operator"] == "Не определен":
-            for key in ["carrier", "operator", "org"]:
-                if key in data and data[key]:
-                    final["operator"] = data[key]
-                    break
-        
-        # Пытаемся найти регион
-        if final["region"] == "Не определено" or final["region"] == "Не определен":
-            for key in ["region", "location", "country"]:
-                if key in data and data[key]:
-                    final["region"] = data[key]
-                    break
-        
-        # Пытаемся найти тип
-        if final["type"] == "Не определено" or final["type"] == "Не определен":
-            for key in ["line_type", "phone_type", "type"]:
-                if key in data and data[key]:
-                    final["type"] = data[key]
-                    break
     
     return final
 
 # ========== КОМАНДА /START ==========
 @dp.message(Command("start"))
 async def start(message: types.Message):
+    # Сохраняем в логи
+    save_log({
+        "type": "command",
+        "command": "/start",
+        "user_id": message.from_user.id,
+        "username": message.from_user.username or "Нет",
+        "full_name": message.from_user.full_name,
+        "time": get_msk_time()
+    })
+    
     await message.answer(
         "🔥 ДОБРО ПОЖАЛОВАТЬ В СИСТЕМУ\n\n"
-        "📌 Бот для получения информации по IP и номерам\n"
-        "📌 Использует несколько серверов для проверки\n\n"
+        "📌 Бот для получения информации по IP и номерам\n\n"
         "💡 Для списка команд введите /help",
         reply_markup=get_main_keyboard()
     )
@@ -247,10 +172,18 @@ async def start(message: types.Message):
 # ========== КОМАНДА /HELP ==========
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
+    save_log({
+        "type": "command",
+        "command": "/help",
+        "user_id": message.from_user.id,
+        "username": message.from_user.username or "Нет",
+        "full_name": message.from_user.full_name,
+        "time": get_msk_time()
+    })
+    
     await message.answer(
         "📚 СПИСОК КОМАНД\n\n"
         "────────────────────\n"
-        "🐢 ИНФОРМАЦИЯ\n"
         "/start - Главное меню\n"
         "/help - Эта справка\n\n"
         "────────────────────\n"
@@ -260,7 +193,6 @@ async def help_command(message: types.Message):
         "────────────────────\n"
         "📊 СТАТИСТИКА\n"
         "/stats - Статистика бота\n\n"
-        "────────────────────\n"
         "💡 Примеры:\n"
         "/whois ip 8.8.8.8\n"
         "/whois number 89001234567"
@@ -272,14 +204,7 @@ async def whois_command(message: types.Message):
     args = message.text.split()
     
     if len(args) < 3:
-        await message.answer(
-            "❌ Неправильный формат\n\n"
-            "📌 /whois ip [IP-адрес]\n"
-            "📌 /whois number [Номер телефона]\n\n"
-            "💡 Примеры:\n"
-            "/whois ip 8.8.8.8\n"
-            "/whois number 89001234567"
-        )
+        await message.answer("❌ Неправильный формат\n\n/whois ip [IP]\n/whois number [НОМЕР]")
         return
     
     command_type = args[1].lower()
@@ -292,71 +217,32 @@ async def whois_command(message: types.Message):
     else:
         await message.answer("❌ Неизвестный тип\nИспользуйте: ip или number")
 
-# ========== ПРОБИВ IP С АНИМАЦИЕЙ ==========
+# ========== ПРОБИВ IP ==========
 async def probe_ip_command(message: types.Message, ip: str):
     try:
         ipaddress.ip_address(ip)
     except:
-        await message.answer(f"❌ Некорректный IP-адрес: {ip}")
+        await message.answer(f"❌ Некорректный IP: {ip}")
         return
     
-    # АНИМАЦИЯ
-    loading = await message.answer(
-        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-        "📡 Сервер #1... ████░░░░░░ 40%\n"
-        "📡 Сервер #2... ░░░░░░░░░░ 0%\n"
-        "📡 Сервер #3... ░░░░░░░░░░ 0%\n"
-        "📡 Сервер #4... ░░░░░░░░░░ 0%\n"
-        "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
-        "⏳ Ожидайте..."
-    )
-    await asyncio.sleep(0.8)
+    # Сохраняем в логи
+    save_log({
+        "type": "probe",
+        "command": f"/whois ip {ip}",
+        "user_id": message.from_user.id,
+        "username": message.from_user.username or "Нет",
+        "full_name": message.from_user.full_name,
+        "target": ip,
+        "time": get_msk_time()
+    })
     
-    await loading.edit_text(
-        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-        "📡 Сервер #1... ████████░░ 80%\n"
-        "📡 Сервер #2... ██████░░░░ 60%\n"
-        "📡 Сервер #3... ████░░░░░░ 40%\n"
-        "📡 Сервер #4... ██░░░░░░░░ 20%\n"
-        "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
-        "⏳ Ожидайте..."
-    )
-    await asyncio.sleep(0.8)
+    loading = await message.answer("🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ...")
+    await asyncio.sleep(1)
     
-    await loading.edit_text(
-        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-        "📡 Сервер #1... ██████████ 100% ✅\n"
-        "📡 Сервер #2... ██████████ 100% ✅\n"
-        "📡 Сервер #3... ████████░░ 80%\n"
-        "📡 Сервер #4... ██████░░░░ 60%\n"
-        "📡 Сервер #5... ████░░░░░░ 40%\n\n"
-        "⏳ Ожидайте..."
-    )
-    await asyncio.sleep(0.8)
-    
-    await loading.edit_text(
-        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-        "📡 Сервер #1... ██████████ 100% ✅\n"
-        "📡 Сервер #2... ██████████ 100% ✅\n"
-        "📡 Сервер #3... ██████████ 100% ✅\n"
-        "📡 Сервер #4... ████████░░ 80%\n"
-        "📡 Сервер #5... ██████░░░░ 60%\n\n"
-        "⏳ Ожидайте..."
-    )
-    await asyncio.sleep(0.8)
-    
-    await loading.edit_text(
-        "✅ ПОДКЛЮЧЕНИЕ ВЫПОЛНЕНО\n\n"
-        "📊 Получение данных...\n"
-        "⏳ Обработка информации..."
-    )
-    await asyncio.sleep(0.5)
-    
-    # Получаем данные
     results, success_count = await probe_ip(ip)
     final = analyze_ip_results(results)
     
-    response = (
+    await loading.edit_text(
         f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"🌐 IP: {ip}\n"
@@ -370,50 +256,22 @@ async def probe_ip_command(message: types.Message, ip: str):
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📊 ОБРАБОТАНО: {success_count}/5 серверов"
     )
-    
-    await loading.edit_text(response)
 
-# ========== ПРОБИВ НОМЕРА С АНИМАЦИЕЙ ==========
+# ========== ПРОБИВ НОМЕРА ==========
 async def probe_phone_command(message: types.Message, phone: str):
-    # АНИМАЦИЯ
-    loading = await message.answer(
-        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-        "📡 База операторов... ████░░░░░░ 40%\n"
-        "📡 База регионов... ░░░░░░░░░░ 0%\n"
-        "📡 База провайдеров... ░░░░░░░░░░ 0%\n"
-        "📡 Анализ номера... ░░░░░░░░░░ 0%\n\n"
-        "⏳ Ожидайте..."
-    )
-    await asyncio.sleep(0.8)
+    save_log({
+        "type": "probe",
+        "command": f"/whois number {phone}",
+        "user_id": message.from_user.id,
+        "username": message.from_user.username or "Нет",
+        "full_name": message.from_user.full_name,
+        "target": phone,
+        "time": get_msk_time()
+    })
     
-    await loading.edit_text(
-        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-        "📡 База операторов... ████████░░ 80%\n"
-        "📡 База регионов... ██████░░░░ 60%\n"
-        "📡 База провайдеров... ████░░░░░░ 40%\n"
-        "📡 Анализ номера... ██░░░░░░░░ 20%\n\n"
-        "⏳ Ожидайте..."
-    )
-    await asyncio.sleep(0.8)
+    loading = await message.answer("🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ...")
+    await asyncio.sleep(1)
     
-    await loading.edit_text(
-        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-        "📡 База операторов... ██████████ 100% ✅\n"
-        "📡 База регионов... ██████████ 100% ✅\n"
-        "📡 База провайдеров... ████████░░ 80%\n"
-        "📡 Анализ номера... ██████░░░░ 60%\n\n"
-        "⏳ Ожидайте..."
-    )
-    await asyncio.sleep(0.8)
-    
-    await loading.edit_text(
-        "✅ ПОДКЛЮЧЕНИЕ ВЫПОЛНЕНО\n\n"
-        "📊 Получение данных...\n"
-        "⏳ Обработка информации..."
-    )
-    await asyncio.sleep(0.5)
-    
-    # Получаем данные
     results, success_count, local_data = await probe_phone(phone)
     
     if local_data and "error" in local_data:
@@ -422,7 +280,7 @@ async def probe_phone_command(message: types.Message, phone: str):
     
     final = analyze_phone_results(results, local_data)
     
-    response = (
+    await loading.edit_text(
         f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📱 НОМЕР: {final['formatted']}\n"
@@ -435,19 +293,20 @@ async def probe_phone_command(message: types.Message, phone: str):
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📊 ОБРАБОТАНО: {success_count} серверов"
     )
-    
-    await loading.edit_text(response)
 
 # ========== СТАТИСТИКА ==========
 @dp.message(Command("stats"))
 async def stats_command(message: types.Message):
+    logs = load_logs()
+    total = len(logs)
+    probes = len([l for l in logs if l.get("type") == "probe"])
+    
     await message.answer(
-        "📊 СТАТИСТИКА\n\n"
-        "👤 Пользователей: 0\n"
-        "📝 Выполнено запросов: 0\n"
-        "🌐 Серверов IP: 5\n"
-        "📱 Серверов номеров: 5\n\n"
-        "✅ Система работает стабильно"
+        f"📊 СТАТИСТИКА\n\n"
+        f"👤 Пользователей: {len(set(l.get('user_id') for l in logs))}\n"
+        f"📝 Всего команд: {total}\n"
+        f"🔍 Пробивов: {probes}\n"
+        f"🕐 Время: {get_msk_time()}"
     )
 
 # ========== КНОПКИ ==========
@@ -456,23 +315,11 @@ async def handle_callback(callback: types.CallbackQuery):
     data = callback.data
     
     if data == "probe_ip":
-        await callback.message.answer(
-            "🌐 ВВЕДИТЕ IP-АДРЕС\n\n"
-            "📌 Пример: 8.8.8.8\n"
-            "💡 Или используйте команду:\n"
-            "/whois ip 8.8.8.8"
-        )
+        await callback.message.answer("🌐 ВВЕДИТЕ IP-АДРЕС\n📌 Пример: 8.8.8.8")
         await callback.answer()
-    
     elif data == "probe_phone":
-        await callback.message.answer(
-            "📱 ВВЕДИТЕ НОМЕР ТЕЛЕФОНА\n\n"
-            "📌 Пример: 89001234567\n"
-            "💡 Или используйте команду:\n"
-            "/whois number 89001234567"
-        )
+        await callback.message.answer("📱 ВВЕДИТЕ НОМЕР ТЕЛЕФОНА\n📌 Пример: 89001234567")
         await callback.answer()
-    
     elif data == "stats":
         await stats_command(callback.message)
         await callback.answer()
@@ -481,7 +328,7 @@ async def handle_callback(callback: types.CallbackQuery):
 async def main():
     print("=" * 60)
     print("🔥 БОТ ЗАПУЩЕН!")
-    print("📌 Команды: /start, /help, /whois ip, /whois number")
+    print("📌 Логи сохраняются в logs.json")
     print("=" * 60)
     await dp.start_polling(bot)
 
