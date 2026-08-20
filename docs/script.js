@@ -6,7 +6,6 @@ const VALID_KEYS = [
     'MASTER!KEY!QWERTY123'
 ];
 
-// ПРЯМОЙ URL К ФАЙЛУ logs.json В РЕПОЗИТОРИИ
 const DATA_URL = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/';
 
 let logsData = [];
@@ -27,6 +26,7 @@ function login() {
         loginError.classList.remove('show');
         loadData();
         setInterval(loadData, 15000);
+        startClock();
     } else {
         loginError.classList.add('show');
         keyInput.value = '';
@@ -44,6 +44,15 @@ logoutBtn.addEventListener('click', () => {
     keyInput.value = '';
 });
 
+// ========== ЧАСЫ ==========
+function startClock() {
+    setInterval(() => {
+        const now = new Date();
+        const time = now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow' });
+        document.getElementById('liveTime').textContent = `🕐 ${time} МСК`;
+    }, 1000);
+}
+
 // ========== ТАБЫ ==========
 document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -58,55 +67,28 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 // ========== ЗАГРУЗКА ==========
 async function loadData() {
     try {
-        const url = DATA_URL + 'logs.json?t=' + Date.now();
-        console.log('📥 Загрузка:', url);
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            console.warn('⚠️ logs.json не найден (404)');
-            showDemoData();
-            return;
-        }
-        
-        const text = await response.text();
-        
-        // Проверяем, что это не HTML (не PHP ошибка)
-        if (text.trim().startsWith('<?php') || text.trim().startsWith('<')) {
-            console.error('❌ Получен HTML вместо JSON');
-            showDemoData();
-            return;
-        }
-        
-        try {
-            logsData = JSON.parse(text);
-        } catch (e) {
-            console.error('❌ Ошибка парсинга JSON:', e);
-            showDemoData();
-            return;
-        }
-        
+        const response = await fetch(DATA_URL + 'logs.json?t=' + Date.now());
+        if (!response.ok) throw new Error('logs.json не найден');
+        logsData = await response.json();
         renderLogs();
         renderChats();
         renderStats();
-        document.getElementById('logsContainer').innerHTML += '<div style="text-align:center;color:rgba(0,255,100,0.3);padding:5px;font-size:11px;">✅ Данные загружены из logs.json</div>';
-        
+        document.getElementById('updateTime').textContent = '🔄 Обновлено: ' + new Date().toLocaleTimeString('ru-RU');
     } catch (error) {
         console.error('Ошибка:', error);
+        document.getElementById('logsContainer').innerHTML = '<div class="loading-text">❌ Ошибка загрузки данных</div>';
         showDemoData();
     }
 }
 
 function showDemoData() {
-    const demoData = [
+    logsData = [
         {"command": "/start", "username": "SlNpidora", "user_id": "8308522569", "time": "20.08.2026 15:30:00", "type": "command"},
         {"command": "/whois ip 8.8.8.8", "username": "SlNpidora", "user_id": "8308522569", "target": "8.8.8.8", "time": "20.08.2026 15:31:00", "type": "probe"},
-        {"command": "/whois number 89001234567", "username": "SlNpidora", "user_id": "8308522569", "target": "89001234567", "time": "20.08.2026 15:32:00", "type": "probe"},
     ];
-    logsData = demoData;
     renderLogs();
     renderChats();
     renderStats();
-    document.getElementById('logsContainer').innerHTML += '<div style="text-align:center;color:rgba(255,200,0,0.4);padding:5px;font-size:11px;">⚠️ Демо-данные (файл logs.json не найден, бот ещё не создал его)</div>';
 }
 
 function renderLogs() {
@@ -132,6 +114,7 @@ function renderLogs() {
             </div>
             <div class="log-command">📝 ${log.command || 'Неизвестно'}</div>
             ${log.target ? `<div class="log-target">🎯 ${log.target}</div>` : ''}
+            <div class="log-type">${log.type || 'command'}</div>
         </div>
     `).join('');
 }
@@ -142,7 +125,7 @@ function renderChats() {
     
     logsData.forEach(log => {
         const id = log.user_id;
-        if (!users[id]) users[id] = { username: log.username || 'Нет', full_name: log.full_name || 'Нет', count: 0, logs: [] };
+        if (!users[id]) users[id] = { username: log.username || 'Нет', count: 0, logs: [] };
         users[id].count++;
         users[id].logs.push(log);
     });
@@ -169,12 +152,12 @@ function renderStats() {
     document.getElementById('statUsers').textContent = users.size;
     document.getElementById('statCommands').textContent = logsData.length;
     document.getElementById('statProbes').textContent = probes.length;
-    document.getElementById('statTime').textContent = new Date().toLocaleTimeString('ru-RU');
+    document.getElementById('statLastUpdate').textContent = new Date().toLocaleTimeString('ru-RU');
 }
 
 function filterLogs() { renderLogs(); }
 
-// ========== ОТКРЫТИЕ ЧАТА ==========
+// ========== МОДАЛКА ==========
 function openChat(userId, username, logs) {
     let modal = document.getElementById('chatModal');
     if (!modal) {
