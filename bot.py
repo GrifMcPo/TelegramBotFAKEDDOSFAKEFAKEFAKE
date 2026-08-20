@@ -5,7 +5,7 @@ import logging
 import re
 import requests
 import json
-import base64
+import sqlite3
 import ipaddress
 import phonenumbers
 from phonenumbers import carrier, geocoder, timezone
@@ -15,36 +15,13 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# ========== ПОЛНОСТЬЮ ЗАТКИВАЕМ ЛОГИ ==========
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('bot.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-
-# ОТКЛЮЧАЕМ ВЕСЬ СПАМ ОТ AIOGRAM
-for name in logging.root.manager.loggerDict:
-    if 'aiogram' in name:
-        logging.getLogger(name).setLevel(logging.CRITICAL)
-
-logging.getLogger('aiogram').setLevel(logging.CRITICAL)
-logging.getLogger('aiogram.dispatcher').setLevel(logging.CRITICAL)
-logging.getLogger('aiogram.event').setLevel(logging.CRITICAL)
-logging.getLogger('aiogram.client').setLevel(logging.CRITICAL)
-logging.getLogger('aiogram.client.session').setLevel(logging.CRITICAL)
-logging.getLogger('aiogram.client.session.aiohttp').setLevel(logging.CRITICAL)
-logging.getLogger('aiogram.utils').setLevel(logging.CRITICAL)
-logging.getLogger('aiogram.bot').setLevel(logging.CRITICAL)
-
+# ========== НАСТРОЙКА ЛОГИРОВАНИЯ ==========
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "8857252828"))
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 if not BOT_TOKEN:
     print("❌ Токен не найден!")
@@ -53,69 +30,159 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ========== НАСТРОЙКИ GITHUB ==========
-REPO_OWNER = "GrifMcPo"
-REPO_NAME = "TelegramBotFAKEDDOSFAKEFAKEFAKE"
-BRANCH = "main"
-LOGS_FILE = "logs.json"
+# ========== SQLite БАЗА ДАННЫХ ==========
+DB_FILE = "logs.db"
 
-def get_github_headers():
-    return {
-        'Authorization': f'token {GITHUB_TOKEN}',
-        'Accept': 'application/vnd.github.v3+json'
-    }
-
-def get_file_from_github(filename):
-    try:
-        if not GITHUB_TOKEN:
-            return None, None
-        url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{filename}'
-        headers = get_github_headers()
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            data = response.json()
-            content = base64.b64decode(data['content']).decode('utf-8')
-            return json.loads(content), data['sha']
-        elif response.status_code == 404:
-            return [], None
-        return [], None
-    except:
-        return [], None
-
-def save_file_to_github(filename, data, message="📊 Update logs"):
-    try:
-        if not GITHUB_TOKEN:
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            return True
-        url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{filename}'
-        headers = get_github_headers()
-        existing, sha = get_file_from_github(filename)
-        content = json.dumps(data, indent=2, ensure_ascii=False)
-        encoded = base64.b64encode(content.encode('utf-8')).decode('utf-8')
-        payload = {'message': message, 'content': encoded, 'branch': BRANCH}
-        if sha:
-            payload['sha'] = sha
-        response = requests.put(url, headers=headers, json=payload)
-        if response.status_code in [200, 201]:
-            logger.info(f"✅ Файл {filename} сохранен в GitHub")
-            return True
-        else:
-            logger.error(f"❌ Ошибка сохранения: {response.status_code}")
-            return False
-    except Exception as e:
-        logger.error(f"❌ Ошибка: {e}")
-        return False
-
-def load_logs():
-    logs, _ = get_file_from_github(LOGS_FILE)
-    return logs if logs else []
+def init_db():
+    """Создаёт таблицу если её нет"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT,
+            command TEXT,
+            user_id INTEGER,
+            username TEXT,
+            full_name TEXT,
+            target TEXT,
+            time TEXT
+        )
+    ''')
+    # Индексы для быстрого поиска
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_id ON logs (user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_time ON logs (time)')
+    conn.commit()
+    conn.close()
+    logger.info("✅ База данных инициализирована")
 
 def save_log(log_entry):
-    logs = load_logs()
-    logs.append(log_entry)
-    save_file_to_github(LOGS_FILE, logs, f"📊 New log: {log_entry.get('command', 'unknown')}")
-    return logs
+    """Сохраняет запись в базу"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO logs (type, command, user_id, username, full_name, target, time)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            log_entry.get('type', 'command'),
+            log_entry.get('command', ''),
+            log_entry.get('user_id', 0),
+            log_entry.get('username', ''),
+            log_entry.get('full_name', ''),
+            log_entry.get('target', ''),
+            log_entry.get('time', get_msk_time())
+        ))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"❌ Ошибка сохранения в БД: {e}")
+        return False
+
+def get_all_logs(limit=100):
+    """Получает последние записи"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM logs ORDER BY id DESC LIMIT ?', (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        logs = []
+        for row in rows:
+            logs.append({
+                'id': row[0],
+                'type': row[1],
+                'command': row[2],
+                'user_id': row[3],
+                'username': row[4],
+                'full_name': row[5],
+                'target': row[6],
+                'time': row[7]
+            })
+        return logs
+    except Exception as e:
+        logger.error(f"❌ Ошибка чтения БД: {e}")
+        return []
+
+def get_users_stats():
+    """Статистика по пользователям"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT user_id, username, full_name, COUNT(*) as count, MAX(time) as last
+            FROM logs 
+            GROUP BY user_id 
+            ORDER BY count DESC
+        ''')
+        rows = cursor.fetchall()
+        conn.close()
+        
+        users = []
+        for row in rows:
+            users.append({
+                'user_id': row[0],
+                'username': row[1] or 'Нет',
+                'full_name': row[2] or 'Нет',
+                'count': row[3],
+                'last': row[4] or 'Нет'
+            })
+        return users
+    except Exception as e:
+        logger.error(f"❌ Ошибка статистики: {e}")
+        return []
+
+def get_total_stats():
+    """Общая статистика"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT COUNT(*) FROM logs')
+        total = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(DISTINCT user_id) FROM logs')
+        users = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM logs WHERE type = 'probe'")
+        probes = cursor.fetchone()[0]
+        
+        conn.close()
+        return {'total': total, 'users': users, 'probes': probes}
+    except Exception as e:
+        logger.error(f"❌ Ошибка статистики: {e}")
+        return {'total': 0, 'users': 0, 'probes': 0}
+
+def get_user_logs(user_id):
+    """Все логи конкретного пользователя"""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM logs WHERE user_id = ? ORDER BY id DESC', (user_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        logs = []
+        for row in rows:
+            logs.append({
+                'id': row[0],
+                'type': row[1],
+                'command': row[2],
+                'user_id': row[3],
+                'username': row[4],
+                'full_name': row[5],
+                'target': row[6],
+                'time': row[7]
+            })
+        return logs
+    except Exception as e:
+        logger.error(f"❌ Ошибка: {e}")
+        return []
+
+# Инициализируем БД при запуске
+init_db()
 
 def get_msk_time():
     return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
@@ -277,7 +344,7 @@ def analyze_phone_results(results, local_data):
     
     return final
 
-# ========== КОМАНДЫ ==========
+# ========== КОМАНДА /START ==========
 @dp.message(Command("start"))
 async def start(message: types.Message):
     save_log({
@@ -296,6 +363,7 @@ async def start(message: types.Message):
         reply_markup=get_main_keyboard()
     )
 
+# ========== КОМАНДА /HELP ==========
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
     save_log({
@@ -319,6 +387,7 @@ async def help_command(message: types.Message):
         "/whois number 89001234567"
     )
 
+# ========== КОМАНДА /WHOIS ==========
 @dp.message(Command("whois"))
 async def whois_command(message: types.Message):
     args = message.text.split()
@@ -337,6 +406,7 @@ async def whois_command(message: types.Message):
     else:
         await message.answer("❌ Используйте: ip или number")
 
+# ========== ПРОБИВ IP ==========
 async def probe_ip_command(message: types.Message, ip: str):
     try:
         ipaddress.ip_address(ip)
@@ -374,6 +444,7 @@ async def probe_ip_command(message: types.Message, ip: str):
         f"📊 ОБРАБОТАНО: {success_count}/5 серверов"
     )
 
+# ========== ПРОБИВ НОМЕРА ==========
 async def probe_phone_command(message: types.Message, phone: str):
     save_log({
         "type": "probe",
@@ -409,18 +480,16 @@ async def probe_phone_command(message: types.Message, phone: str):
         f"📊 ОБРАБОТАНО: {success_count} серверов"
     )
 
+# ========== СТАТИСТИКА ==========
 @dp.message(Command("stats"))
 async def stats_command(message: types.Message):
-    logs = load_logs()
-    total = len(logs)
-    users = set(l.get('user_id') for l in logs)
-    probes = len([l for l in logs if l.get("type") == "probe"])
+    stats = get_total_stats()
     
     await message.answer(
         f"📊 СТАТИСТИКА\n\n"
-        f"👤 Пользователей: {len(users)}\n"
-        f"📝 Всего команд: {total}\n"
-        f"🔍 Пробивов: {probes}\n"
+        f"👤 Пользователей: {stats['users']}\n"
+        f"📝 Всего команд: {stats['total']}\n"
+        f"🔍 Пробивов: {stats['probes']}\n"
         f"🕐 Время: {get_msk_time()}"
     )
 
@@ -443,21 +512,19 @@ async def handle_callback(callback: types.CallbackQuery):
 async def main():
     print("=" * 60)
     print("🔥 БОТ ЗАПУЩЕН!")
-    print("📌 Логи сохраняются в logs.json (GitHub)")
+    print("📌 База данных: logs.db (SQLite)")
     print("📌 Команды: /start, /help, /whois ip, /whois number")
     print("=" * 60)
     
-    # Запускаем с автоматическим переподключением при конфликте
-    while True:
-        try:
+    try:
+        await dp.start_polling(bot)
+    except Exception as e:
+        if "Conflict" in str(e):
+            print("⚠️ Конфликт! Переподключаемся...")
+            await asyncio.sleep(5)
             await dp.start_polling(bot)
-        except Exception as e:
-            if "Conflict" in str(e):
-                print("⚠️ Конфликт! Переподключаемся через 5 секунд...")
-                await asyncio.sleep(5)
-                continue
-            else:
-                raise
+        else:
+            raise
 
 if __name__ == "__main__":
     try:
