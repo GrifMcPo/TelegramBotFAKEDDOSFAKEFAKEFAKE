@@ -1,5 +1,5 @@
 const VALID_KEYS = ['OWNER!KEY!_%!$W@$%OWENR!@#W$!($', 'ADMIN!KEY!@#$%^&*()', 'SUPER!ADMIN!KEY!12345', 'BOSS!KEY!_!@#$%^&*', 'MASTER!KEY!QWERTY123'];
-const DATA_URL = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/';
+const API_URL = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/';
 
 let logsData = [];
 
@@ -47,12 +47,13 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     });
 });
 
-// ========== ЗАГРУЗКА ==========
+// ========== ЗАГРУЗКА ЧЕРЕЗ API ==========
 async function loadData() {
     try {
-        const response = await fetch(DATA_URL + 'logs.json?t=' + Date.now());
-        if (!response.ok) throw new Error('logs.json не найден');
-        logsData = await response.json();
+        const response = await fetch(API_URL + 'api.php?action=get_logs&t=' + Date.now());
+        if (!response.ok) throw new Error('Ошибка загрузки');
+        const data = await response.json();
+        logsData = data;
         renderLogs();
         renderChats();
         renderStats();
@@ -163,5 +164,4 @@ function closeChat() {
     document.getElementById('chatModal').classList.remove('active');
 }
 
-// ========== ИНИЦИАЛИЗАЦИЯ ==========
 console.log('🚀 ADMIN PANEL LOADED');
