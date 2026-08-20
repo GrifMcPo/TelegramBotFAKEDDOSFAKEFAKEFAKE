@@ -32,6 +32,10 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+def get_msk_time():
+    return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
+
 # ========== НАСТРОЙКИ GITHUB ==========
 REPO_OWNER = "GrifMcPo"
 REPO_NAME = "TelegramBotFAKEDDOSFAKEFAKEFAKE"
@@ -72,7 +76,6 @@ def save_file_to_github(filename, content, message="📊 Update DB"):
         url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{filename}'
         headers = get_github_headers()
         
-        # Проверяем существование файла
         existing = None
         try:
             resp = requests.get(url, headers=headers)
@@ -169,13 +172,13 @@ def save_log(log_entry):
         ))
         conn.commit()
         
-        # Получаем ID последней записи
         last_id = cursor.lastrowid
         conn.close()
         
         # Бэкапим каждые 10 записей
         if last_id % 10 == 0:
             asyncio.create_task(backup_db_to_github())
+            asyncio.create_task(export_to_json())
         
         return True
     except Exception as e:
@@ -210,15 +213,19 @@ def get_all_logs(limit=200):
 
 def export_to_json():
     """Экспортирует логи в JSON для сайта"""
-    logs = get_all_logs(500)
-    with open(JSON_FILE, 'w', encoding='utf-8') as f:
-        json.dump(logs, f, indent=2, ensure_ascii=False)
-    
-    # Сохраняем JSON в GitHub
-    with open(JSON_FILE, 'r', encoding='utf-8') as f:
-        content = f.read()
-    save_file_to_github(JSON_FILE, content.encode('utf-8'), f"📊 Export JSON - {get_msk_time()}")
-    return True
+    try:
+        logs = get_all_logs(500)
+        with open(JSON_FILE, 'w', encoding='utf-8') as f:
+            json.dump(logs, f, indent=2, ensure_ascii=False)
+        
+        with open(JSON_FILE, 'r', encoding='utf-8') as f:
+            content = f.read()
+        save_file_to_github(JSON_FILE, content.encode('utf-8'), f"📊 Export JSON - {get_msk_time()}")
+        logger.info("✅ JSON экспортирован")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Ошибка экспорта JSON: {e}")
+        return False
 
 def get_stats():
     """Получает статистику"""
@@ -242,15 +249,10 @@ def get_stats():
         return {'total': 0, 'users': 0, 'probes': 0}
 
 # ========== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАПУСКЕ ==========
-# Восстанавливаем БД из GitHub
 restore_db_from_github()
-# Экспортируем JSON для сайта
 export_to_json()
 
-def get_msk_time():
-    return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
-
-# ========== КЛАВИАТУРЫ И КОМАНДЫ ==========
+# ========== КЛАВИАТУРЫ ==========
 def get_main_keyboard():
     buttons = [
         [InlineKeyboardButton(text="🌐 ПРОБИВ IP", callback_data="probe_ip")],
@@ -259,6 +261,7 @@ def get_main_keyboard():
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+# ========== АНИМАЦИЯ ==========
 async def show_connection_animation(message: types.Message):
     msg = await message.answer(
         "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
@@ -339,6 +342,7 @@ async def probe_ip(ip: str):
     
     return results, success_count
 
+# ========== ПРОБИВ НОМЕРА ==========
 async def probe_phone(phone: str):
     results = []
     success_count = 0
