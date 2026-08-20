@@ -19,24 +19,14 @@ jobs:
       with:
         python-version: '3.11'
     
-    - name: 📦 Install dependencies
+    - name: 📦 Install
       run: |
-        pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install aiogram python-dotenv requests phonenumbers
     
     - name: 🔧 Create .env
       run: |
         echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" >> .env
+        echo "GITHUB_TOKEN=${{ secrets.GH_TOKEN }}" >> .env
     
     - name: 🤖 Run bot
       run: python bot.py
-    
-    - name: 📤 Upload logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: bot-data
-        path: |
-          logs.db
-          logs.json
-        retention-days: 7
