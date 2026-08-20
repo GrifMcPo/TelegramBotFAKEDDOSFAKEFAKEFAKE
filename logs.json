@@ -31,9 +31,16 @@
     "time": "20.08.2026 23:20:02"
   },
   {
+    "command": "/whois number +79883429700",
+    "user_id": 8308522569,
+    "username": "SlNpidora",
+    "target": "+79883429700",
+    "time": "21.08.2026 01:19:57"
+  },
+  {
     "command": "тест",
     "user_id": 0,
     "username": "system",
-    "time": "21.08.2026 00:59:18"
+    "time": "21.08.2026 01:19:57"
   }
 ]
