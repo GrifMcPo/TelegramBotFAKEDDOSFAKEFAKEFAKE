@@ -30,15 +30,83 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 LOGS_FILE = "logs.json"
+BLACKLIST_FILE = "blacklist.json"
 REPO = "GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE"
 BRANCH = "main"
 
 def get_msk_time():
     return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
 
-# ========== ЛОГИ (БЫСТРО) ==========
+# ========== ЧЕРНЫЙ СПИСОК ==========
+def load_blacklist():
+    try:
+        if os.path.exists(BLACKLIST_FILE):
+            with open(BLACKLIST_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return {}
+    except:
+        return {}
+
+def save_blacklist_local(blacklist):
+    try:
+        with open(BLACKLIST_FILE, 'w', encoding='utf-8') as f:
+            json.dump(blacklist, f, indent=2, ensure_ascii=False)
+        return True
+    except:
+        return False
+
+def save_blacklist_to_github():
+    try:
+        if not GITHUB_TOKEN:
+            return False
+        with open(BLACKLIST_FILE, 'r', encoding='utf-8') as f:
+            content = f.read()
+        url = f"https://api.github.com/repos/{REPO}/contents/{BLACKLIST_FILE}"
+        headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+        existing = requests.get(url, headers=headers)
+        sha = existing.json().get("sha") if existing.status_code == 200 else None
+        encoded = base64.b64encode(content.encode('utf-8')).decode('utf-8')
+        payload = {"message": f"📊 Update blacklist {get_msk_time()}", "content": encoded, "branch": BRANCH}
+        if sha:
+            payload["sha"] = sha
+        response = requests.put(url, headers=headers, json=payload)
+        return response.status_code in [200, 201]
+    except:
+        return False
+
+def add_to_blacklist(user_id, reason, admin_id):
+    blacklist = load_blacklist()
+    blacklist[str(user_id)] = {
+        "reason": reason,
+        "added_by": admin_id,
+        "added_at": get_msk_time()
+    }
+    save_blacklist_local(blacklist)
+    asyncio.create_task(async_save_blacklist_to_github())
+    return True
+
+def remove_from_blacklist(user_id):
+    blacklist = load_blacklist()
+    if str(user_id) in blacklist:
+        del blacklist[str(user_id)]
+        save_blacklist_local(blacklist)
+        asyncio.create_task(async_save_blacklist_to_github())
+        return True
+    return False
+
+def is_blacklisted(user_id):
+    blacklist = load_blacklist()
+    return str(user_id) in blacklist
+
+def get_blacklist_reason(user_id):
+    blacklist = load_blacklist()
+    return blacklist.get(str(user_id), {}).get("reason", "Не указана")
+
+async def async_save_blacklist_to_github():
+    await asyncio.to_thread(save_blacklist_to_github)
+
+# ========== ЛОГИ ==========
 def save_log_local(log_entry):
-    """Сохраняет локально (мгновенно)"""
     try:
         logs = []
         if os.path.exists(LOGS_FILE):
@@ -52,7 +120,6 @@ def save_log_local(log_entry):
         return False
 
 def save_to_github():
-    """Сохраняет в GitHub (в фоне)"""
     try:
         if not GITHUB_TOKEN:
             return False
@@ -72,15 +139,10 @@ def save_to_github():
         return False
 
 def save_log(log_entry):
-    """Сохраняет локально и запускает GitHub в фоне"""
-    # 1. Локально (мгновенно)
     save_log_local(log_entry)
-    
-    # 2. GitHub в фоне (не ждём!)
     asyncio.create_task(async_save_to_github())
 
 async def async_save_to_github():
-    """Асинхронное сохранение в GitHub"""
     await asyncio.to_thread(save_to_github)
 
 # ========== КЛАВИАТУРА ==========
@@ -92,7 +154,7 @@ def get_main_keyboard():
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-# ========== АНИМАЦИЯ (БЫСТРО) ==========
+# ========== АНИМАЦИЯ ==========
 async def show_animation(message: types.Message):
     msg = await message.answer(
         "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
@@ -227,9 +289,20 @@ def analyze_phone_results(results, local_data):
 # ========== КОМАНДЫ ==========
 @dp.message(Command("start"))
 async def start(message: types.Message):
+    user_id = message.from_user.id
+    
+    # Проверка черного списка
+    if is_blacklisted(user_id):
+        await message.answer(
+            f"⛔ ВЫ В ЧЕРНОМ СПИСКЕ БОТА!\n\n"
+            f"📌 Причина: {get_blacklist_reason(user_id)}\n"
+            f"🔄 Для вопросов обратитесь к администратору."
+        )
+        return
+    
     save_log({
         "command": "/start",
-        "user_id": message.from_user.id,
+        "user_id": user_id,
         "username": message.from_user.username or "Нет",
         "full_name": message.from_user.full_name,
         "time": get_msk_time()
@@ -243,9 +316,18 @@ async def start(message: types.Message):
 
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
+    user_id = message.from_user.id
+    
+    if is_blacklisted(user_id):
+        await message.answer(
+            f"⛔ ВЫ В ЧЕРНОМ СПИСКЕ БОТА!\n\n"
+            f"📌 Причина: {get_blacklist_reason(user_id)}"
+        )
+        return
+    
     save_log({
         "command": "/help",
-        "user_id": message.from_user.id,
+        "user_id": user_id,
         "username": message.from_user.username or "Нет",
         "full_name": message.from_user.full_name,
         "time": get_msk_time()
@@ -265,6 +347,15 @@ async def help_command(message: types.Message):
 
 @dp.message(Command("whois"))
 async def whois_command(message: types.Message):
+    user_id = message.from_user.id
+    
+    if is_blacklisted(user_id):
+        await message.answer(
+            f"⛔ ВЫ В ЧЕРНОМ СПИСКЕ БОТА!\n\n"
+            f"📌 Причина: {get_blacklist_reason(user_id)}"
+        )
+        return
+    
     args = message.text.split()
     
     if len(args) < 3:
@@ -282,6 +373,8 @@ async def whois_command(message: types.Message):
         await message.answer("❌ Используйте: ip или number")
 
 async def probe_ip_command(message: types.Message, ip: str):
+    user_id = message.from_user.id
+    
     try:
         ipaddress.ip_address(ip)
     except:
@@ -290,7 +383,7 @@ async def probe_ip_command(message: types.Message, ip: str):
     
     save_log({
         "command": f"/whois ip {ip}",
-        "user_id": message.from_user.id,
+        "user_id": user_id,
         "username": message.from_user.username or "Нет",
         "full_name": message.from_user.full_name,
         "target": ip,
@@ -318,9 +411,11 @@ async def probe_ip_command(message: types.Message, ip: str):
     )
 
 async def probe_phone_command(message: types.Message, phone: str):
+    user_id = message.from_user.id
+    
     save_log({
         "command": f"/whois number {phone}",
-        "user_id": message.from_user.id,
+        "user_id": user_id,
         "username": message.from_user.username or "Нет",
         "full_name": message.from_user.full_name,
         "target": phone,
@@ -353,6 +448,15 @@ async def probe_phone_command(message: types.Message, phone: str):
 
 @dp.message(Command("stats"))
 async def stats_command(message: types.Message):
+    user_id = message.from_user.id
+    
+    if is_blacklisted(user_id):
+        await message.answer(
+            f"⛔ ВЫ В ЧЕРНОМ СПИСКЕ БОТА!\n\n"
+            f"📌 Причина: {get_blacklist_reason(user_id)}"
+        )
+        return
+    
     try:
         with open(LOGS_FILE, 'r', encoding='utf-8') as f:
             logs = json.load(f)
@@ -371,6 +475,16 @@ async def stats_command(message: types.Message):
 # ========== КНОПКИ ==========
 @dp.callback_query()
 async def handle_callback(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    
+    if is_blacklisted(user_id):
+        await callback.message.answer(
+            f"⛔ ВЫ В ЧЕРНОМ СПИСКЕ БОТА!\n\n"
+            f"📌 Причина: {get_blacklist_reason(user_id)}"
+        )
+        await callback.answer()
+        return
+    
     data = callback.data
     
     if data == "probe_ip":
@@ -388,12 +502,17 @@ async def main():
     print("=" * 60)
     print("🔥 БОТ ЗАПУЩЕН!")
     print("📌 Логи сохраняются локально (мгновенно)")
-    print("📌 GitHub синхронизация в фоне (не тормозит)")
+    print("📌 GitHub синхронизация в фоне")
+    print("📌 ЧЕРНЫЙ СПИСОК АКТИВЕН!")
     print("=" * 60)
     
     if not os.path.exists(LOGS_FILE):
         with open(LOGS_FILE, 'w', encoding='utf-8') as f:
             json.dump([], f)
+    
+    if not os.path.exists(BLACKLIST_FILE):
+        with open(BLACKLIST_FILE, 'w', encoding='utf-8') as f:
+            json.dump({}, f)
     
     try:
         await dp.start_polling(bot)
@@ -411,6 +530,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("⏹️ Сохраняем логи в GitHub...")
         save_to_github()
+        save_blacklist_to_github()
         print("⏹️ Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка: {e}")
