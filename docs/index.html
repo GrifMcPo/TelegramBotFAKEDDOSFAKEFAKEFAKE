@@ -34,7 +34,7 @@
             <div class="header-container">
                 <div class="header-logo"><span>⚡</span><h1>ADMIN PANEL</h1></div>
                 <div class="header-user">
-                    <span>👤 Администратор</span>
+                    <span id="liveTime">🕐 Загрузка...</span>
                     <button id="logoutBtn" class="logout-btn">🚪 Выйти</button>
                 </div>
             </div>
@@ -52,8 +52,9 @@
         <section id="tab-logs" class="tab-content active">
             <div class="container">
                 <div class="log-controls">
-                    <input type="text" id="searchLogs" placeholder="🔍 Поиск по командам..." oninput="filterLogs()">
+                    <input type="text" id="searchLogs" placeholder="🔍 Поиск по командам, пользователям..." oninput="filterLogs()">
                     <button onclick="loadData()" class="btn-refresh">🔄 Обновить</button>
+                    <span id="updateTime" class="update-time"></span>
                 </div>
                 <div class="logs-container" id="logsContainer">
                     <div class="loading-text">⏳ Загрузка логов...</div>
@@ -75,23 +76,35 @@
         <section id="tab-stats" class="tab-content">
             <div class="container">
                 <h2>📊 СТАТИСТИКА</h2>
-                <div class="stats-grid" id="statsContainer">
-                    <div class="stat-card"><div class="stat-number" id="statUsers">0</div><div class="stat-label">👤 Пользователей</div></div>
-                    <div class="stat-card"><div class="stat-number" id="statCommands">0</div><div class="stat-label">📝 Команд</div></div>
-                    <div class="stat-card"><div class="stat-number" id="statProbes">0</div><div class="stat-label">🔍 Пробивов</div></div>
-                    <div class="stat-card"><div class="stat-number" id="statTime">0</div><div class="stat-label">🕐 Последнее обновление</div></div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="statUsers">0</div>
+                        <div class="stat-label">👤 Пользователей</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="statCommands">0</div>
+                        <div class="stat-label">📝 Всего команд</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="statProbes">0</div>
+                        <div class="stat-label">🔍 Пробивов</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="statLastUpdate">0</div>
+                        <div class="stat-label">🕐 Последнее обновление</div>
+                    </div>
                 </div>
             </div>
         </section>
 
         <footer>
             <div class="container">
-                <p>© 2026 ADMIN PANEL</p>
+                <p>© 2026 ADMIN PANEL — Все логи в реальном времени</p>
             </div>
         </footer>
     </div>
 
-    <!-- ========== МОДАЛКА ========== -->
+    <!-- ========== МОДАЛКА ЧАТА ========== -->
     <div id="chatModal" class="chat-modal">
         <div class="chat-modal-content">
             <div class="modal-header">
