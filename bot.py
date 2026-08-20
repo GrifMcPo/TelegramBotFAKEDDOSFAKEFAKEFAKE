@@ -14,9 +14,6 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# Импортируем базу данных
-from database import init_db, save_log, get_total_stats, export_to_json
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -30,13 +27,40 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ========== ИНИЦИАЛИЗАЦИЯ БД ==========
-async def on_startup():
-    await init_db()
-    await export_to_json()
+# ========== ЛОГИ В JSON ==========
+LOGS_FILE = "logs.json"
 
 def get_msk_time():
     return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
+
+def save_log(log_entry):
+    """Просто сохраняет в JSON"""
+    try:
+        logs = []
+        if os.path.exists(LOGS_FILE):
+            with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+                logs = json.load(f)
+        logs.append(log_entry)
+        with open(LOGS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(logs, f, indent=2, ensure_ascii=False)
+        print(f"✅ Лог сохранён: {log_entry.get('command', 'unknown')}")
+        return True
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
+        return False
+
+def get_stats():
+    """Простая статистика из JSON"""
+    try:
+        if not os.path.exists(LOGS_FILE):
+            return {'total': 0, 'users': 0, 'probes': 0}
+        with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+            logs = json.load(f)
+        users = set(l.get('user_id') for l in logs)
+        probes = len([l for l in logs if l.get('type') == 'probe'])
+        return {'total': len(logs), 'users': len(users), 'probes': probes}
+    except:
+        return {'total': 0, 'users': 0, 'probes': 0}
 
 # ========== КЛАВИАТУРА ==========
 def get_main_keyboard():
@@ -186,7 +210,7 @@ def analyze_phone_results(results, local_data):
 # ========== КОМАНДЫ ==========
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await save_log({
+    save_log({
         "type": "command",
         "command": "/start",
         "user_id": message.from_user.id,
@@ -194,7 +218,6 @@ async def start(message: types.Message):
         "full_name": message.from_user.full_name,
         "time": get_msk_time()
     })
-    await export_to_json()
     
     await message.answer(
         "🔥 ДОБРО ПОЖАЛОВАТЬ В СИСТЕМУ\n\n"
@@ -204,7 +227,7 @@ async def start(message: types.Message):
 
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
-    await save_log({
+    save_log({
         "type": "command",
         "command": "/help",
         "user_id": message.from_user.id,
@@ -212,7 +235,6 @@ async def help_command(message: types.Message):
         "full_name": message.from_user.full_name,
         "time": get_msk_time()
     })
-    await export_to_json()
     
     await message.answer(
         "📚 СПИСОК КОМАНД\n\n"
@@ -251,7 +273,7 @@ async def probe_ip_command(message: types.Message, ip: str):
         await message.answer(f"❌ Некорректный IP: {ip}")
         return
     
-    await save_log({
+    save_log({
         "type": "probe",
         "command": f"/whois ip {ip}",
         "user_id": message.from_user.id,
@@ -260,7 +282,6 @@ async def probe_ip_command(message: types.Message, ip: str):
         "target": ip,
         "time": get_msk_time()
     })
-    await export_to_json()
     
     loading = await show_animation(message)
     
@@ -283,7 +304,7 @@ async def probe_ip_command(message: types.Message, ip: str):
     )
 
 async def probe_phone_command(message: types.Message, phone: str):
-    await save_log({
+    save_log({
         "type": "probe",
         "command": f"/whois number {phone}",
         "user_id": message.from_user.id,
@@ -292,7 +313,6 @@ async def probe_phone_command(message: types.Message, phone: str):
         "target": phone,
         "time": get_msk_time()
     })
-    await export_to_json()
     
     loading = await show_animation(message)
     
@@ -320,7 +340,7 @@ async def probe_phone_command(message: types.Message, phone: str):
 
 @dp.message(Command("stats"))
 async def stats_command(message: types.Message):
-    stats = await get_total_stats()
+    stats = get_stats()
     
     await message.answer(
         f"📊 СТАТИСТИКА\n\n"
@@ -347,12 +367,10 @@ async def handle_callback(callback: types.CallbackQuery):
 
 # ========== ЗАПУСК ==========
 async def main():
-    await on_startup()
-    
     print("=" * 60)
     print("🔥 БОТ ЗАПУЩЕН!")
-    print("📌 База данных: SQLite (logs.db)")
-    print("📌 Логи экспортируются в logs.json")
+    print("📌 Логи сохраняются в logs.json")
+    print("📌 Команды: /start, /help, /whois ip, /whois number")
     print("=" * 60)
     
     try:
