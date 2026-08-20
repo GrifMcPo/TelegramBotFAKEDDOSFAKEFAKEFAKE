@@ -6,35 +6,55 @@
     "time": "20.08.2026 23:09:17"
   },
   {
-    "command": "тест",
-    "user_id": 0,
-    "username": "system",
-    "time": "20.08.2026 23:09:42"
+    "command": "/whois number +79883429700",
+    "user_id": 8308522569,
+    "username": "SlNpidora",
+    "target": "+79883429700",
+    "time": "20.08.2026 23:10:20"
   },
   {
     "command": "тест",
     "user_id": 0,
     "username": "system",
-    "time": "20.08.2026 23:10:04"
+    "time": "20.08.2026 23:10:20"
+  },
+  {
+    "command": "тест",
+    "user_id": 0,
+    "username": "system",
+    "time": "20.08.2026 23:10:41"
+  },
+  {
+    "command": "тест",
+    "user_id": 0,
+    "username": "system",
+    "time": "20.08.2026 23:11:06"
   },
   {
     "command": "/whois number +79883429700",
     "user_id": 8308522569,
     "username": "SlNpidora",
     "target": "+79883429700",
-    "time": "20.08.2026 23:20:02"
+    "time": "20.08.2026 23:12:01"
   },
   {
     "command": "/whois number +79883429700",
     "user_id": 8308522569,
     "username": "SlNpidora",
     "target": "+79883429700",
-    "time": "20.08.2026 23:26:13"
+    "time": "20.08.2026 23:17:15"
+  },
+  {
+    "command": "/whois number +79883429700",
+    "user_id": 8308522569,
+    "username": "SlNpidora",
+    "target": "+79883429700",
+    "time": "20.08.2026 23:26:34"
   },
   {
     "command": "тест",
     "user_id": 0,
     "username": "system",
-    "time": "20.08.2026 23:26:13"
+    "time": "20.08.2026 23:26:35"
   }
 ]
