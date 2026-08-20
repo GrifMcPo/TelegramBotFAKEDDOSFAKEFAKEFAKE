@@ -3,17 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ADMIN BOT — Панель управления</title>
+    <title>ADMIN PANEL — Логи бота</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- ========== СТРАНИЦА ВХОДА ========== -->
     <div id="loginPage" class="login-page">
         <div class="login-container">
             <div class="login-header">
-                <h1>⚡ ADMIN BOT</h1>
-                <p>Панель управления</p>
+                <h1>⚡ ADMIN PANEL</h1>
+                <p>Панель управления ботом</p>
             </div>
             <div class="login-box">
                 <div class="login-title">🔑 ВВЕДИТЕ КЛЮЧ ДОСТУПА</div>
@@ -21,91 +20,70 @@
                     <input type="password" id="keyInput" placeholder="Введите ключ..." autofocus>
                     <button id="loginBtn">ВОЙТИ</button>
                 </div>
-                <div id="loginError" class="login-error">❌ Неверный ключ доступа!</div>
-                <div class="login-hint"><p>💡 Ключ можно получить у владельца бота</p></div>
+                <div id="loginError" class="login-error">❌ Неверный ключ!</div>
             </div>
         </div>
         <div class="rgb-bg"></div>
     </div>
 
-    <!-- ========== ГЛАВНАЯ СТРАНИЦА ========== -->
     <div id="mainPage" class="main-page" style="display: none;">
-        
-        <!-- HEADER -->
         <header>
             <div class="header-container">
-                <div class="header-logo"><span>⚡</span><h1>ADMIN BOT</h1></div>
+                <div class="header-logo"><span>⚡</span><h1>ADMIN PANEL</h1></div>
                 <div class="header-user">
-                    <span>👤 Администратор</span>
+                    <span id="userInfo">👤 Администратор</span>
                     <button id="logoutBtn" class="logout-btn">🚪 Выйти</button>
                 </div>
             </div>
         </header>
 
-        <!-- НАВИГАЦИЯ -->
         <nav class="nav-tabs">
             <div class="container">
-                <button class="nav-btn active" data-tab="stats">📊 Статистика</button>
+                <button class="nav-btn active" data-tab="logs">📋 Логи</button>
                 <button class="nav-btn" data-tab="chats">💬 Чаты</button>
-                <button class="nav-btn" data-tab="commands">📋 Команды</button>
-                <button class="nav-btn" data-tab="users">👤 Пользователи</button>
+                <button class="nav-btn" data-tab="stats">📊 Статистика</button>
             </div>
         </nav>
 
-        <!-- ===== ВКЛАДКА: СТАТИСТИКА ===== -->
-        <section id="tab-stats" class="tab-content active">
+        <!-- ===== ЛОГИ ===== -->
+        <section id="tab-logs" class="tab-content active">
             <div class="container">
-                <div class="stats-grid">
-                    <div class="stat-card"><div class="stat-icon">👤</div><div class="stat-number" id="statUsers">0</div><div class="stat-label">Пользователей</div></div>
-                    <div class="stat-card"><div class="stat-icon">📝</div><div class="stat-number" id="statCommands">0</div><div class="stat-label">Выполнено команд</div></div>
-                    <div class="stat-card"><div class="stat-icon">🕐</div><div class="stat-number" id="statUptime">0</div><div class="stat-label">Последнее обновление</div></div>
-                    <div class="stat-card"><div class="stat-icon">📡</div><div class="stat-number" id="statStatus">⏳</div><div class="stat-label">Статус бота</div></div>
+                <div class="log-controls">
+                    <input type="text" id="searchLogs" placeholder="🔍 Поиск по командам..." oninput="filterLogs()">
+                    <button onclick="loadData()" class="btn-refresh">🔄 Обновить</button>
+                </div>
+                <div class="logs-container" id="logsContainer">
+                    <div class="loading-text">⏳ Загрузка логов...</div>
                 </div>
             </div>
         </section>
 
-        <!-- ===== ВКЛАДКА: ЧАТЫ ===== -->
+        <!-- ===== ЧАТЫ ===== -->
         <section id="tab-chats" class="tab-content">
             <div class="container">
-                <h2>💬 ЧАТЫ ПОЛЬЗОВАТЕЛЕЙ</h2>
+                <h2>💬 ЧАТЫ</h2>
                 <div class="chats-grid" id="chatsContainer">
                     <div class="loading-text">⏳ Загрузка чатов...</div>
                 </div>
             </div>
         </section>
 
-        <!-- ===== ВКЛАДКА: КОМАНДЫ ===== -->
-        <section id="tab-commands" class="tab-content">
+        <!-- ===== СТАТИСТИКА ===== -->
+        <section id="tab-stats" class="tab-content">
             <div class="container">
-                <h2>📋 ДОСТУПНЫЕ КОМАНДЫ</h2>
-                <div class="commands-grid">
-                    <div class="command-card"><span class="cmd-icon">🐢</span><div class="cmd-info"><div class="cmd-name">.inf</div><div class="cmd-desc">Справка по командам</div></div></div>
-                    <div class="command-card"><span class="cmd-icon">🌐</span><div class="cmd-info"><div class="cmd-name">.whois ip [IP]</div><div class="cmd-desc">Пробив по IP-адресу</div></div></div>
-                    <div class="command-card"><span class="cmd-icon">📱</span><div class="cmd-info"><div class="cmd-name">.whois number [НОМЕР]</div><div class="cmd-desc">Пробив по номеру телефона</div></div></div>
-                    <div class="command-card"><span class="cmd-icon">🔥</span><div class="cmd-info"><div class="cmd-name">.spam [N] [ТЕКСТ]</div><div class="cmd-desc">Спам текстом N раз</div></div></div>
-                    <div class="command-card"><span class="cmd-icon">🎯</span><div class="cmd-info"><div class="cmd-name">.spams</div><div class="cmd-desc">Спам-меню с кнопками</div></div></div>
-                    <div class="command-card"><span class="cmd-icon">🏓</span><div class="cmd-info"><div class="cmd-name">.ping</div><div class="cmd-desc">Проверка работы бота</div></div></div>
-                </div>
-            </div>
-        </section>
-
-        <!-- ===== ВКЛАДКА: ПОЛЬЗОВАТЕЛИ ===== -->
-        <section id="tab-users" class="tab-content">
-            <div class="container">
-                <h2>👤 ВСЕ ПОЛЬЗОВАТЕЛИ</h2>
-                <div class="users-table-container">
-                    <table class="users-table">
-                        <thead><tr><th>#</th><th>ID</th><th>Юзернейм</th><th>Подключен (МСК)</th></tr></thead>
-                        <tbody id="usersTableBody"><tr><td colspan="4" class="loading-text">⏳ Загрузка...</td></tr></tbody>
-                    </table>
+                <h2>📊 СТАТИСТИКА</h2>
+                <div class="stats-grid" id="statsContainer">
+                    <div class="stat-card"><div class="stat-number" id="statUsers">0</div><div class="stat-label">👤 Пользователей</div></div>
+                    <div class="stat-card"><div class="stat-number" id="statCommands">0</div><div class="stat-label">📝 Команд</div></div>
+                    <div class="stat-card"><div class="stat-number" id="statProbes">0</div><div class="stat-label">🔍 Пробивов</div></div>
+                    <div class="stat-card"><div class="stat-number" id="statTime">0</div><div class="stat-label">🕐 Последнее обновление</div></div>
                 </div>
             </div>
         </section>
 
         <footer>
             <div class="container">
-                <p>© 2026 <strong>ADMIN BOT</strong> — Панель управления</p>
-                <p class="footer-small">⚡ Данные в реальном времени • МСК</p>
+                <p>© 2026 ADMIN PANEL</p>
             </div>
         </footer>
     </div>
