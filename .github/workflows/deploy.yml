@@ -22,8 +22,6 @@ jobs:
     steps:
     - name: 📥 Checkout
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
     
     - name: 🐍 Setup Python
       uses: actions/setup-python@v5
@@ -39,21 +37,6 @@ jobs:
       run: |
         echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" >> .env
         echo "ADMIN_ID=${{ secrets.ADMIN_ID }}" >> .env
-        echo "GITHUB_TOKEN=${{ secrets.GH_TOKEN }}" >> .env
-        echo "✅ .env created"
-    
-    - name: 📥 Restore data
-      run: |
-        if curl -s -o logs.json "https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/logs.json"; then
-          echo "✅ logs.json загружен"
-        else
-          echo "[]" > logs.json
-        fi
-        if curl -s -o blacklist.json "https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/blacklist.json"; then
-          echo "✅ blacklist.json загружен"
-        else
-          echo "{}" > blacklist.json
-        fi
     
     - name: 🤖 Run bot
       run: python bot.py
@@ -62,16 +45,9 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: bot-data-${{ github.run_id }}
+        name: bot-logs-${{ github.run_id }}
         path: |
           logs.json
           blacklist.json
           bot.log
         retention-days: 7
-    
-    - name: 📤 Save data to repo (manual)
-      if: always()
-      run: |
-        echo "📊 Данные сохранены как артефакт!"
-        echo "📌 Скачай их вручную из Actions → Artifacts"
-        echo "📌 Или добавь GITHUB_TOKEN с правами на запись"
