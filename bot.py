@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-MAIN_ADMIN = 8308522569  # ОДИН АДМИН!
+MAIN_ADMIN = 8308522569
 
 if not BOT_TOKEN:
     print("❌ Токен не найден!")
@@ -33,6 +33,7 @@ LOGS_FILE = "logs.json"
 BLACKLIST_FILE = "blacklist.json"
 
 business_connections = {}
+blocked_notified = {}  # {user_id: True} — чтобы не спамить
 
 def get_msk_time():
     return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
@@ -68,6 +69,9 @@ def add_to_blacklist(user_id, reason, admin_id, time_minutes=0):
         "expires_at": expires_at
     }
     save_blacklist_local(blacklist)
+    # Сбрасываем уведомление
+    if str(user_id) in blocked_notified:
+        del blocked_notified[str(user_id)]
     return True
 
 def remove_from_blacklist(user_id):
@@ -75,6 +79,8 @@ def remove_from_blacklist(user_id):
     if str(user_id) in blacklist:
         del blacklist[str(user_id)]
         save_blacklist_local(blacklist)
+        if str(user_id) in blocked_notified:
+            del blocked_notified[str(user_id)]
         return True
     return False
 
@@ -89,6 +95,8 @@ def is_blacklisted(user_id):
         if datetime.now() > expires:
             del blacklist[str(user_id)]
             save_blacklist_local(blacklist)
+            if str(user_id) in blocked_notified:
+                del blocked_notified[str(user_id)]
             return False
     
     return True
@@ -411,13 +419,19 @@ async def handle_business_message(message: types.Message):
         
         # Проверка бана
         if is_blacklisted(user_id):
-            reason = get_blacklist_reason(user_id)
-            await delete_business_message(chat_id, message_id, connection_id)
-            await send_to_business_chat(
-                chat_id,
-                f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}",
-                connection_id
-            )
+            # Отправляем уведомление только 1 раз
+            if str(user_id) not in blocked_notified:
+                reason = get_blacklist_reason(user_id)
+                await delete_business_message(chat_id, message_id, connection_id)
+                await send_to_business_chat(
+                    chat_id,
+                    f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}",
+                    connection_id
+                )
+                blocked_notified[str(user_id)] = True
+            else:
+                # Просто удаляем сообщение без ответа
+                await delete_business_message(chat_id, message_id, connection_id)
             return
         
         if not message.text:
@@ -426,7 +440,7 @@ async def handle_business_message(message: types.Message):
         text = message.text.strip()
         
         # ============================================================
-        # .ban (id) (time) (reason) - БАН
+        # .ban (id) (time) (reason)
         # ============================================================
         if text.lower().startswith('.ban'):
             await delete_business_message(chat_id, message_id, connection_id)
@@ -443,8 +457,7 @@ async def handle_business_message(message: types.Message):
             if len(parts) < 3:
                 await send_to_business_chat(
                     chat_id,
-                    "❌ .ban [ID] [время в минутах] [причина]\n"
-                    "Пример: .ban 123456789 60 Спам",
+                    "❌ .ban [ID] [время в минутах] [причина]",
                     connection_id
                 )
                 return
@@ -480,7 +493,7 @@ async def handle_business_message(message: types.Message):
             return
         
         # ============================================================
-        # .unban (id) (reason) - РАЗБАН
+        # .unban (id) (reason)
         # ============================================================
         if text.lower().startswith('.unban'):
             await delete_business_message(chat_id, message_id, connection_id)
@@ -497,8 +510,7 @@ async def handle_business_message(message: types.Message):
             if len(parts) < 2:
                 await send_to_business_chat(
                     chat_id,
-                    "❌ .unban [ID] [причина]\n"
-                    "Пример: .unban 123456789 Ошибка",
+                    "❌ .unban [ID] [причина]",
                     connection_id
                 )
                 return
@@ -722,8 +734,10 @@ async def start(message: types.Message):
     user_id = message.from_user.id
     
     if is_blacklisted(user_id):
-        reason = get_blacklist_reason(user_id)
-        await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
         return
     
     save_log({
@@ -746,8 +760,10 @@ async def help_command(message: types.Message):
     user_id = message.from_user.id
     
     if is_blacklisted(user_id):
-        reason = get_blacklist_reason(user_id)
-        await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
         return
     
     await message.answer(
@@ -777,8 +793,10 @@ async def help_command(message: types.Message):
 async def ping(message: types.Message):
     user_id = message.from_user.id
     if is_blacklisted(user_id):
-        reason = get_blacklist_reason(user_id)
-        await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
         return
     await message.answer(f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}")
 
@@ -786,8 +804,10 @@ async def ping(message: types.Message):
 async def time_command(message: types.Message):
     user_id = message.from_user.id
     if is_blacklisted(user_id):
-        reason = get_blacklist_reason(user_id)
-        await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
         return
     await message.answer(f"🕐 МСК: {get_msk_time()}")
 
@@ -795,8 +815,10 @@ async def time_command(message: types.Message):
 async def info_command(message: types.Message):
     user_id = message.from_user.id
     if is_blacklisted(user_id):
-        reason = get_blacklist_reason(user_id)
-        await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
         return
     user = message.from_user
     await message.answer(
@@ -811,8 +833,10 @@ async def info_command(message: types.Message):
 async def stats_command(message: types.Message):
     user_id = message.from_user.id
     if is_blacklisted(user_id):
-        reason = get_blacklist_reason(user_id)
-        await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
         return
     try:
         with open(LOGS_FILE, 'r', encoding='utf-8') as f:
@@ -891,14 +915,54 @@ async def unban_command(message: types.Message):
     else:
         await message.answer(f"❌ Пользователь {target_id} не найден в черном списке")
 
+# ========== ОБРАБОТЧИК ДЛЯ ОБЫЧНЫХ СООБЩЕНИЙ В ЛИЧКЕ ==========
+@dp.message()
+async def handle_private_message(message: types.Message):
+    """Обрабатывает ЛЮБЫЕ сообщения в личке бота (без /)"""
+    user_id = message.from_user.id
+    
+    # Проверка бана
+    if is_blacklisted(user_id):
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
+        return
+    
+    if not message.text:
+        return
+    
+    text = message.text.strip()
+    
+    # Если сообщение начинается с / — это команда, её обрабатывают другие хендлеры
+    if text.startswith('/'):
+        return
+    
+    # Если сообщение начинается с . — это команда для бизнес-чатов, в личке не работает
+    if text.startswith('.'):
+        await message.answer(
+            "❌ Команды с . работают только в чатах с собеседниками!\n"
+            "📌 В личке используй команды с / (например /help)"
+        )
+        return
+    
+    # Если просто текст — подсказываем
+    await message.answer(
+        "❓ Неизвестная команда\n\n"
+        "📌 Введи /help для списка команд\n"
+        "📌 В чатах с собеседниками используй .команды"
+    )
+
 # ========== КНОПКИ ==========
 @dp.callback_query()
 async def handle_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     
     if is_blacklisted(user_id):
-        reason = get_blacklist_reason(user_id)
-        await callback.message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await callback.message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
         await callback.answer()
         return
     
