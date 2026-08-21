@@ -33,10 +33,7 @@ dp = Dispatcher()
 
 LOGS_FILE = "logs.json"
 BLACKLIST_FILE = "blacklist.json"
-REPO = "GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE"
-BRANCH = "main"
 
-# ========== ХРАНИЛИЩЕ ==========
 user_data = {}
 business_connections = {}
 
@@ -61,25 +58,6 @@ def save_blacklist_local(blacklist):
     except:
         return False
 
-def save_blacklist_to_github():
-    try:
-        if not GITHUB_TOKEN:
-            return False
-        with open(BLACKLIST_FILE, 'r', encoding='utf-8') as f:
-            content = f.read()
-        url = f"https://api.github.com/repos/{REPO}/contents/{BLACKLIST_FILE}"
-        headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
-        existing = requests.get(url, headers=headers)
-        sha = existing.json().get("sha") if existing.status_code == 200 else None
-        encoded = base64.b64encode(content.encode('utf-8')).decode('utf-8')
-        payload = {"message": f"📊 Update blacklist {get_msk_time()}", "content": encoded, "branch": BRANCH}
-        if sha:
-            payload["sha"] = sha
-        response = requests.put(url, headers=headers, json=payload)
-        return response.status_code in [200, 201]
-    except:
-        return False
-
 def add_to_blacklist(user_id, reason, admin_id):
     blacklist = load_blacklist()
     blacklist[str(user_id)] = {
@@ -88,7 +66,6 @@ def add_to_blacklist(user_id, reason, admin_id):
         "added_at": get_msk_time()
     }
     save_blacklist_local(blacklist)
-    asyncio.create_task(async_save_blacklist())
     return True
 
 def remove_from_blacklist(user_id):
@@ -96,7 +73,6 @@ def remove_from_blacklist(user_id):
     if str(user_id) in blacklist:
         del blacklist[str(user_id)]
         save_blacklist_local(blacklist)
-        asyncio.create_task(async_save_blacklist())
         return True
     return False
 
@@ -107,9 +83,6 @@ def is_blacklisted(user_id):
 def get_blacklist_reason(user_id):
     blacklist = load_blacklist()
     return blacklist.get(str(user_id), {}).get("reason", "Не указана")
-
-async def async_save_blacklist():
-    await asyncio.to_thread(save_blacklist_to_github)
 
 # ========== ЛОГИ ==========
 def save_log_local(log_entry):
@@ -125,31 +98,8 @@ def save_log_local(log_entry):
     except:
         return False
 
-def save_to_github():
-    try:
-        if not GITHUB_TOKEN:
-            return False
-        with open(LOGS_FILE, 'r', encoding='utf-8') as f:
-            content = f.read()
-        url = f"https://api.github.com/repos/{REPO}/contents/{LOGS_FILE}"
-        headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
-        existing = requests.get(url, headers=headers)
-        sha = existing.json().get("sha") if existing.status_code == 200 else None
-        encoded = base64.b64encode(content.encode('utf-8')).decode('utf-8')
-        payload = {"message": f"📊 Update logs {get_msk_time()}", "content": encoded, "branch": BRANCH}
-        if sha:
-            payload["sha"] = sha
-        response = requests.put(url, headers=headers, json=payload)
-        return response.status_code in [200, 201]
-    except:
-        return False
-
 def save_log(log_entry):
     save_log_local(log_entry)
-    asyncio.create_task(async_save_to_github())
-
-async def async_save_to_github():
-    await asyncio.to_thread(save_to_github)
 
 # ========== УДАЛЕНИЕ ЧЕРЕЗ BUSINESS API ==========
 async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
@@ -179,20 +129,35 @@ async def send_to_business_chat(chat_id: int, text: str, connection_id: str, rep
             reply_markup=reply_markup
         )
     except Exception as e:
-        logger.error(f"❌ Ошибка отправки в бизнес-чат: {e}")
+        logger.error(f"❌ Ошибка отправки: {e}")
         return None
 
-# ========== КЛАВИАТУРА ==========
-def get_main_keyboard():
-    buttons = [
-        [InlineKeyboardButton(text="🌐 ПРОБИВ IP", callback_data="probe_ip")],
-        [InlineKeyboardButton(text="📱 ПРОБИВ НОМЕРА", callback_data="probe_phone")],
-        [InlineKeyboardButton(text="📊 СТАТИСТИКА", callback_data="stats")],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+# ========== БЕЗОПАСНОЕ РЕДАКТИРОВАНИЕ ==========
+async def safe_edit(chat_id: int, message_id: int, text: str, connection_id: str = None):
+    """Безопасно редактирует сообщение через bot.edit_message_text"""
+    try:
+        if connection_id:
+            return await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text,
+                business_connection_id=connection_id
+            )
+        else:
+            return await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text
+            )
+    except Exception as e:
+        logger.warning(f"⚠️ Не удалось отредактировать: {e}")
+        return None
 
-# ========== АНИМАЦИЯ ==========
+# ========== АНИМАЦИЯ (ПРАВИЛЬНАЯ) ==========
 async def show_animation(target, connection_id=None):
+    """Показывает анимацию подключения с редактированием"""
+    
+    # Отправляем первое сообщение
     if connection_id:
         msg = await send_to_business_chat(
             target,
@@ -216,68 +181,49 @@ async def show_animation(target, connection_id=None):
             "⏳ Ожидайте..."
         )
     
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.5)
     
-    if connection_id:
-        await msg.edit_text(
-            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-            "📡 Сервер #1... ████████░░ 80%\n"
-            "📡 Сервер #2... ██████░░░░ 60%\n"
-            "📡 Сервер #3... ████░░░░░░ 40%\n"
-            "📡 Сервер #4... ██░░░░░░░░ 20%\n"
-            "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
-            "⏳ Ожидайте..."
-        )
-    else:
-        await msg.edit_text(
-            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-            "📡 Сервер #1... ████████░░ 80%\n"
-            "📡 Сервер #2... ██████░░░░ 60%\n"
-            "📡 Сервер #3... ████░░░░░░ 40%\n"
-            "📡 Сервер #4... ██░░░░░░░░ 20%\n"
-            "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
-            "⏳ Ожидайте..."
-        )
+    # Редактируем — шаг 2
+    await safe_edit(
+        target,
+        msg.message_id,
+        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+        "📡 Сервер #1... ████████░░ 80%\n"
+        "📡 Сервер #2... ██████░░░░ 60%\n"
+        "📡 Сервер #3... ████░░░░░░ 40%\n"
+        "📡 Сервер #4... ██░░░░░░░░ 20%\n"
+        "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
+        "⏳ Ожидайте...",
+        connection_id
+    )
+    await asyncio.sleep(0.5)
     
-    await asyncio.sleep(0.3)
+    # Редактируем — шаг 3
+    await safe_edit(
+        target,
+        msg.message_id,
+        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+        "📡 Сервер #1... ██████████ 100% ✅\n"
+        "📡 Сервер #2... ██████████ 100% ✅\n"
+        "📡 Сервер #3... ████████░░ 80%\n"
+        "📡 Сервер #4... ██████░░░░ 60%\n"
+        "📡 Сервер #5... ████░░░░░░ 40%\n\n"
+        "⏳ Ожидайте...",
+        connection_id
+    )
+    await asyncio.sleep(0.5)
     
-    if connection_id:
-        await msg.edit_text(
-            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-            "📡 Сервер #1... ██████████ 100% ✅\n"
-            "📡 Сервер #2... ██████████ 100% ✅\n"
-            "📡 Сервер #3... ████████░░ 80%\n"
-            "📡 Сервер #4... ██████░░░░ 60%\n"
-            "📡 Сервер #5... ████░░░░░░ 40%\n\n"
-            "⏳ Ожидайте..."
-        )
-    else:
-        await msg.edit_text(
-            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-            "📡 Сервер #1... ██████████ 100% ✅\n"
-            "📡 Сервер #2... ██████████ 100% ✅\n"
-            "📡 Сервер #3... ████████░░ 80%\n"
-            "📡 Сервер #4... ██████░░░░ 60%\n"
-            "📡 Сервер #5... ████░░░░░░ 40%\n\n"
-            "⏳ Ожидайте..."
-        )
+    # Редактируем — финал
+    await safe_edit(
+        target,
+        msg.message_id,
+        "✅ ПОДКЛЮЧЕНИЕ ВЫПОЛНЕНО\n\n"
+        "📊 Получение данных...\n"
+        "⏳ Обработка информации...",
+        connection_id
+    )
+    await asyncio.sleep(0.5)
     
-    await asyncio.sleep(0.3)
-    
-    if connection_id:
-        await msg.edit_text(
-            "✅ ПОДКЛЮЧЕНИЕ ВЫПОЛНЕНО\n\n"
-            "📊 Получение данных...\n"
-            "⏳ Обработка информации..."
-        )
-    else:
-        await msg.edit_text(
-            "✅ ПОДКЛЮЧЕНИЕ ВЫПОЛНЕНО\n\n"
-            "📊 Получение данных...\n"
-            "⏳ Обработка информации..."
-        )
-    
-    await asyncio.sleep(0.3)
     return msg
 
 # ========== ПРОБИВ IP ==========
@@ -372,6 +318,15 @@ def analyze_phone_results(results, local_data):
     
     return final
 
+# ========== КЛАВИАТУРА ==========
+def get_main_keyboard():
+    buttons = [
+        [InlineKeyboardButton(text="🌐 ПРОБИВ IP", callback_data="probe_ip")],
+        [InlineKeyboardButton(text="📱 ПРОБИВ НОМЕРА", callback_data="probe_phone")],
+        [InlineKeyboardButton(text="📊 СТАТИСТИКА", callback_data="stats")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 # ========== BUSINESS CONNECTION ==========
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
@@ -383,7 +338,6 @@ async def handle_business_connection(connection: BusinessConnection):
         business_connections[str(user_id)] = connection_id
         
         logger.info(f"🔗 BUSINESS CONNECTION: @{username} (ID: {user_id})")
-        logger.info(f"📌 Connection ID: {connection_id}")
         
         user_data[user_id] = {
             "connection_id": connection_id,
@@ -425,10 +379,7 @@ async def handle_business_message(message: types.Message):
         
         text = message.text.strip()
         
-        # ================================================================
-        # КОМАНДЫ С . (ТОЧКА) В БИЗНЕС-ЧАТАХ
-        # ================================================================
-        
+        # .help
         if text.lower() == '.help':
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(
@@ -447,6 +398,7 @@ async def handle_business_message(message: types.Message):
             )
             return
         
+        # .ping
         if text.lower() == '.ping':
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(
@@ -456,6 +408,7 @@ async def handle_business_message(message: types.Message):
             )
             return
         
+        # .time
         if text.lower() == '.time':
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(
@@ -465,6 +418,7 @@ async def handle_business_message(message: types.Message):
             )
             return
         
+        # .info
         if text.lower() == '.info':
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(
@@ -478,6 +432,7 @@ async def handle_business_message(message: types.Message):
             )
             return
         
+        # .stats
         if text.lower() == '.stats':
             await delete_business_message(chat_id, message_id, connection_id)
             try:
@@ -502,6 +457,7 @@ async def handle_business_message(message: types.Message):
                 )
             return
         
+        # .whois
         if text.lower().startswith('.whois'):
             await delete_business_message(chat_id, message_id, connection_id)
             
@@ -530,12 +486,10 @@ async def handle_business_message(message: types.Message):
                 )
             return
         
-        logger.info(f"📩 Бизнес-сообщение: {text}")
-        
     except Exception as e:
         logger.error(f"❌ Ошибка бизнес-сообщения: {e}")
 
-# ========== ПРОБИВ В БИЗНЕС-ЧАТЕ ==========
+# ========== ПРОБИВ IP В БИЗНЕС-ЧАТЕ ==========
 async def probe_ip_business(chat_id, ip, connection_id, user_id, message):
     try:
         ipaddress.ip_address(ip)
@@ -552,12 +506,17 @@ async def probe_ip_business(chat_id, ip, connection_id, user_id, message):
         "time": get_msk_time()
     })
     
+    # АНИМАЦИЯ
     loading = await show_animation(chat_id, connection_id)
     
+    # ПРОБИВ
     results, success_count = await probe_ip(ip)
     final = analyze_ip_results(results)
     
-    await loading.edit_text(
+    # ФИНАЛЬНЫЙ ОТВЕТ (РЕДАКТИРУЕМ ПОСЛЕДНЕЕ СООБЩЕНИЕ)
+    await safe_edit(
+        chat_id,
+        loading.message_id,
         f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"🌐 IP: {ip}\n"
@@ -569,9 +528,11 @@ async def probe_ip_business(chat_id, ip, connection_id, user_id, message):
         f"🔗 AS: {final['as']}\n"
         f"⏰ ЧАСОВОЙ ПОЯС: {final['timezone']}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"📊 ОБРАБОТАНО: {success_count}/5 серверов"
+        f"📊 ОБРАБОТАНО: {success_count}/5 серверов",
+        connection_id
     )
 
+# ========== ПРОБИВ НОМЕРА В БИЗНЕС-ЧАТЕ ==========
 async def probe_phone_business(chat_id, phone, connection_id, user_id, message):
     save_log({
         "command": f".whois number {phone}",
@@ -587,12 +548,14 @@ async def probe_phone_business(chat_id, phone, connection_id, user_id, message):
     results, success_count, local_data = await probe_phone(phone)
     
     if local_data and "error" in local_data:
-        await loading.edit_text(f"❌ {local_data['error']}")
+        await safe_edit(chat_id, loading.message_id, f"❌ {local_data['error']}", connection_id)
         return
     
     final = analyze_phone_results(results, local_data)
     
-    await loading.edit_text(
+    await safe_edit(
+        chat_id,
+        loading.message_id,
         f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📱 НОМЕР: {final['formatted']}\n"
@@ -603,10 +566,11 @@ async def probe_phone_business(chat_id, phone, connection_id, user_id, message):
         f"📊 ТИП: {final['type']}\n"
         f"🌐 КОД СТРАНЫ: {final['country_code']}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"📊 ОБРАБОТАНО: {success_count} серверов"
+        f"📊 ОБРАБОТАНО: {success_count} серверов",
+        connection_id
     )
 
-# ========== ОБЫЧНЫЕ КОМАНДЫ (В ЛИЧКЕ БОТА) ==========
+# ========== ОБЫЧНЫЕ КОМАНДЫ В ЛИЧКЕ ==========
 @dp.message(Command("start"))
 async def start(message: types.Message):
     user_id = message.from_user.id
@@ -741,7 +705,9 @@ async def probe_ip_command(message: types.Message, ip: str):
     results, success_count = await probe_ip(ip)
     final = analyze_ip_results(results)
     
-    await loading.edit_text(
+    await safe_edit(
+        message.chat.id,
+        loading.message_id,
         f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"🌐 IP: {ip}\n"
@@ -771,12 +737,14 @@ async def probe_phone_command(message: types.Message, phone: str):
     results, success_count, local_data = await probe_phone(phone)
     
     if local_data and "error" in local_data:
-        await loading.edit_text(f"❌ {local_data['error']}")
+        await safe_edit(message.chat.id, loading.message_id, f"❌ {local_data['error']}")
         return
     
     final = analyze_phone_results(results, local_data)
     
-    await loading.edit_text(
+    await safe_edit(
+        message.chat.id,
+        loading.message_id,
         f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📱 НОМЕР: {final['formatted']}\n"
@@ -900,9 +868,6 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("⏹️ Сохраняем логи...")
-        save_to_github()
-        save_blacklist_to_github()
         print("⏹️ Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка: {e}")
