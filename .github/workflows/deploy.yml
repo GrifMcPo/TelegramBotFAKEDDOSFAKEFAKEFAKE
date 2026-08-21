@@ -1,9 +1,18 @@
 name: 🚀 Deploy Bot
 
 on:
-  workflow_dispatch:  # ТОЛЬКО РУЧНОЙ ЗАПУСК!
-  schedule:
-    - cron: '0 */6 * * *'  # КАЖДЫЕ 6 ЧАСОВ (по желанию)
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.html'
+      - '*.css'
+      - '*.js'
+
+concurrency:
+  group: bot-deploy
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -13,25 +22,6 @@ jobs:
     steps:
     - name: 📥 Checkout
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Полная история для правильного коммита
-    
-    - name: 📥 Restore logs from GitHub
-      run: |
-        # Скачиваем последний logs.json из репозитория
-        if curl -s -o logs.json "https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/logs.json"; then
-          echo "✅ logs.json загружен"
-        else
-          echo "[]" > logs.json
-          echo "📄 Создан новый logs.json"
-        fi
-        
-        if curl -s -o blacklist.json "https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/blacklist.json"; then
-          echo "✅ blacklist.json загружен"
-        else
-          echo "{}" > blacklist.json
-          echo "📄 Создан новый blacklist.json"
-        fi
     
     - name: 🐍 Setup Python
       uses: actions/setup-python@v5
@@ -46,24 +36,34 @@ jobs:
     - name: 🔧 Create .env
       run: |
         echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" >> .env
+        echo "ADMIN_ID=${{ secrets.ADMIN_ID }}" >> .env
         echo "GITHUB_TOKEN=${{ secrets.GH_TOKEN }}" >> .env
+    
+    - name: 📥 Restore data
+      run: |
+        if curl -s -o logs.json "https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/logs.json"; then
+          echo "✅ logs.json загружен"
+        else
+          echo "[]" > logs.json
+        fi
+        if curl -s -o blacklist.json "https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/blacklist.json"; then
+          echo "✅ blacklist.json загружен"
+        else
+          echo "{}" > blacklist.json
+        fi
     
     - name: 🤖 Run bot
       run: python bot.py
     
-    - name: 📤 Save logs and blacklist
+    - name: 📤 Save data
       if: always()
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        
-        # Добавляем файлы
         git add logs.json blacklist.json 2>/dev/null || true
-        
-        # Коммитим только если есть изменения
         if ! git diff --cached --quiet; then
           git commit -m "📊 Update data $(date '+%Y-%m-%d %H:%M:%S')" || echo "No changes"
           git push
         else
-          echo "✅ Нет изменений для сохранения"
+          echo "✅ Нет изменений"
         fi
