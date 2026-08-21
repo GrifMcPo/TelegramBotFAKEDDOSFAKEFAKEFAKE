@@ -45,7 +45,6 @@
                 <button class="nav-btn active" data-tab="logs">📋 Логи</button>
                 <button class="nav-btn" data-tab="chats">💬 Чаты</button>
                 <button class="nav-btn" data-tab="stats">📊 Статистика</button>
-                <button class="nav-btn" data-tab="blacklist">⛔ Черный список</button>
             </div>
         </nav>
 
@@ -93,39 +92,6 @@
                     <div class="stat-card">
                         <div class="stat-number" id="statLastUpdate">0</div>
                         <div class="stat-label">🕐 Последнее обновление</div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- ===== ЧЕРНЫЙ СПИСОК ===== -->
-        <section id="tab-blacklist" class="tab-content">
-            <div class="container">
-                <h2>⛔ ЧЕРНЫЙ СПИСОК</h2>
-                
-                <div class="blacklist-form">
-                    <h3>➕ ДОБАВИТЬ В ЧЕРНЫЙ СПИСОК</h3>
-                    <div class="form-group">
-                        <input type="text" id="blockUserId" placeholder="🆔 ID пользователя">
-                        <input type="text" id="blockReason" placeholder="📌 Причина блокировки">
-                        <button id="blockBtn" class="btn-primary">⛔ ЗАБЛОКИРОВАТЬ</button>
-                    </div>
-                    <div id="blockMessage" class="message"></div>
-                </div>
-
-                <div class="blacklist-form">
-                    <h3>✅ УДАЛИТЬ ИЗ ЧЕРНОГО СПИСКА</h3>
-                    <div class="form-group">
-                        <input type="text" id="unblockUserId" placeholder="🆔 ID пользователя">
-                        <button id="unblockBtn" class="btn-danger">✅ РАЗБЛОКИРОВАТЬ</button>
-                    </div>
-                    <div id="unblockMessage" class="message"></div>
-                </div>
-
-                <div class="blacklist-list">
-                    <h3>📋 СПИСОК ЗАБЛОКИРОВАННЫХ</h3>
-                    <div id="blacklistContainer">
-                        <div class="loading-text">⏳ Загрузка...</div>
                     </div>
                 </div>
             </div>
