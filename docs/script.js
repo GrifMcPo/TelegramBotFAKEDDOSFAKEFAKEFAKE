@@ -6,11 +6,9 @@ const VALID_KEYS = [
     'MASTER!KEY!QWERTY123'
 ];
 
-// ТОЛЬКО RAW (БЕЗ API)
 const DATA_URL = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/';
 
 let logsData = [];
-let blacklistData = {};
 
 // ========== ВХОД ==========
 const loginPage = document.getElementById('loginPage');
@@ -66,10 +64,9 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     });
 });
 
-// ========== ЗАГРУЗКА ДАННЫХ ==========
+// ========== ЗАГРУЗКА ==========
 async function loadAllData() {
     await loadLogs();
-    await loadBlacklist();
 }
 
 async function loadLogs() {
@@ -86,45 +83,6 @@ async function loadLogs() {
         document.getElementById('logsContainer').innerHTML = '<div class="loading-text">❌ Ошибка загрузки данных</div>';
         showDemoData();
     }
-}
-
-async function loadBlacklist() {
-    try {
-        const response = await fetch(DATA_URL + 'blacklist.json?t=' + Date.now());
-        if (!response.ok) {
-            console.warn('⚠️ blacklist.json не найден');
-            blacklistData = {};
-            renderBlacklist();
-            return;
-        }
-        blacklistData = await response.json();
-        renderBlacklist();
-    } catch (error) {
-        console.warn('⚠️ Ошибка загрузки черного списка:', error);
-        blacklistData = {};
-        renderBlacklist();
-    }
-}
-
-function renderBlacklist() {
-    const container = document.getElementById('blacklistContainer');
-    const entries = Object.entries(blacklistData);
-
-    if (!entries.length) {
-        container.innerHTML = '<div class="loading-text">📭 Черный список пуст</div>';
-        return;
-    }
-
-    container.innerHTML = entries.map(([userId, data]) => `
-        <div class="blacklist-entry">
-            <div class="entry-header">
-                <span class="entry-id">🆔 ${userId}</span>
-                <span class="entry-time">${data.added_at || 'Неизвестно'}</span>
-            </div>
-            <div class="entry-reason">📌 ${data.reason || 'Причина не указана'}</div>
-            <div class="entry-admin">👤 Добавил: ${data.added_by || 'Неизвестно'}</div>
-        </div>
-    `).join('');
 }
 
 function showDemoData() {
@@ -248,9 +206,4 @@ function loadData() {
     loadAllData();
 }
 
-// ========== ЧЕРНЫЙ СПИСОК (БЕЗ API!) ==========
-// Просто показываем данные из blacklist.json, без возможности редактирования через сайт
-// Для управления черным списком используй бота или редактируй файл вручную
-
 console.log('🚀 ADMIN PANEL LOADED');
-console.log('📌 Данные загружаются через RAW (без API)');
