@@ -13,7 +13,10 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BusinessConnection
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+# ========== ПРАВИЛЬНЫЙ ИМПОРТ BUSINESS CONNECTION ==========
+from aiogram.types.business_connection import BusinessConnection
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -372,7 +375,7 @@ def analyze_phone_results(results, local_data):
     
     return final
 
-# ========== ОБРАБОТЧИК BUSINESS CONNECTION ==========
+# ========== BUSINESS CONNECTION ==========
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
     if connection.user:
@@ -399,7 +402,7 @@ async def handle_business_connection(connection: BusinessConnection):
                  f"🔥 Введите .help для списка команд"
         )
 
-# ========== ОБРАБОТЧИК BUSINESS MESSAGE ==========
+# ========== BUSINESS MESSAGE ==========
 @dp.business_message()
 async def handle_business_message(message: types.Message):
     try:
