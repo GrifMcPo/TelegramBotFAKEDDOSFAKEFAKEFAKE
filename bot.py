@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BusinessConnection
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,6 +34,10 @@ LOGS_FILE = "logs.json"
 BLACKLIST_FILE = "blacklist.json"
 REPO = "GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE"
 BRANCH = "main"
+
+# ========== ХРАНИЛИЩЕ ==========
+user_data = {}
+business_connections = {}  # {user_id: connection_id}
 
 def get_msk_time():
     return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
@@ -146,6 +150,37 @@ def save_log(log_entry):
 async def async_save_to_github():
     await asyncio.to_thread(save_to_github)
 
+# ========== УДАЛЕНИЕ ЧЕРЕЗ BUSINESS API ==========
+async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
+    try:
+        url = f'https://api.telegram.org/bot{BOT_TOKEN}/deleteBusinessMessages'
+        payload = {
+            "business_connection_id": connection_id,
+            "message_ids": [message_id]
+        }
+        response = requests.post(url, json=payload, timeout=10)
+        result = response.json()
+        if result.get('ok'):
+            logger.info(f"🗑️ Сообщение {message_id} удалено")
+            return True
+        return False
+    except Exception as e:
+        logger.warning(f"⚠️ Не удалось удалить: {e}")
+        return False
+
+# ========== ОТПРАВКА В БИЗНЕС-ЧАТ ==========
+async def send_to_business_chat(chat_id: int, text: str, connection_id: str, reply_markup=None):
+    try:
+        return await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            business_connection_id=connection_id,
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        logger.error(f"❌ Ошибка отправки в бизнес-чат: {e}")
+        return None
+
 # ========== КЛАВИАТУРА ==========
 def get_main_keyboard():
     buttons = [
@@ -156,42 +191,92 @@ def get_main_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 # ========== АНИМАЦИЯ ==========
-async def show_animation(message: types.Message):
-    msg = await message.answer(
-        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-        "📡 Сервер #1... ████░░░░░░ 40%\n"
-        "📡 Сервер #2... ░░░░░░░░░░ 0%\n"
-        "📡 Сервер #3... ░░░░░░░░░░ 0%\n"
-        "📡 Сервер #4... ░░░░░░░░░░ 0%\n"
-        "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
-        "⏳ Ожидайте..."
-    )
+async def show_animation(target, connection_id=None):
+    """Показывает анимацию подключения"""
+    if connection_id:
+        msg = await send_to_business_chat(
+            target,
+            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+            "📡 Сервер #1... ████░░░░░░ 40%\n"
+            "📡 Сервер #2... ░░░░░░░░░░ 0%\n"
+            "📡 Сервер #3... ░░░░░░░░░░ 0%\n"
+            "📡 Сервер #4... ░░░░░░░░░░ 0%\n"
+            "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
+            "⏳ Ожидайте...",
+            connection_id
+        )
+    else:
+        msg = await target.answer(
+            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+            "📡 Сервер #1... ████░░░░░░ 40%\n"
+            "📡 Сервер #2... ░░░░░░░░░░ 0%\n"
+            "📡 Сервер #3... ░░░░░░░░░░ 0%\n"
+            "📡 Сервер #4... ░░░░░░░░░░ 0%\n"
+            "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
+            "⏳ Ожидайте..."
+        )
+    
     await asyncio.sleep(0.3)
-    await msg.edit_text(
-        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-        "📡 Сервер #1... ████████░░ 80%\n"
-        "📡 Сервер #2... ██████░░░░ 60%\n"
-        "📡 Сервер #3... ████░░░░░░ 40%\n"
-        "📡 Сервер #4... ██░░░░░░░░ 20%\n"
-        "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
-        "⏳ Ожидайте..."
-    )
+    
+    if connection_id:
+        await msg.edit_text(
+            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+            "📡 Сервер #1... ████████░░ 80%\n"
+            "📡 Сервер #2... ██████░░░░ 60%\n"
+            "📡 Сервер #3... ████░░░░░░ 40%\n"
+            "📡 Сервер #4... ██░░░░░░░░ 20%\n"
+            "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
+            "⏳ Ожидайте..."
+        )
+    else:
+        await msg.edit_text(
+            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+            "📡 Сервер #1... ████████░░ 80%\n"
+            "📡 Сервер #2... ██████░░░░ 60%\n"
+            "📡 Сервер #3... ████░░░░░░ 40%\n"
+            "📡 Сервер #4... ██░░░░░░░░ 20%\n"
+            "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
+            "⏳ Ожидайте..."
+        )
+    
     await asyncio.sleep(0.3)
-    await msg.edit_text(
-        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-        "📡 Сервер #1... ██████████ 100% ✅\n"
-        "📡 Сервер #2... ██████████ 100% ✅\n"
-        "📡 Сервер #3... ████████░░ 80%\n"
-        "📡 Сервер #4... ██████░░░░ 60%\n"
-        "📡 Сервер #5... ████░░░░░░ 40%\n\n"
-        "⏳ Ожидайте..."
-    )
+    
+    if connection_id:
+        await msg.edit_text(
+            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+            "📡 Сервер #1... ██████████ 100% ✅\n"
+            "📡 Сервер #2... ██████████ 100% ✅\n"
+            "📡 Сервер #3... ████████░░ 80%\n"
+            "📡 Сервер #4... ██████░░░░ 60%\n"
+            "📡 Сервер #5... ████░░░░░░ 40%\n\n"
+            "⏳ Ожидайте..."
+        )
+    else:
+        await msg.edit_text(
+            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+            "📡 Сервер #1... ██████████ 100% ✅\n"
+            "📡 Сервер #2... ██████████ 100% ✅\n"
+            "📡 Сервер #3... ████████░░ 80%\n"
+            "📡 Сервер #4... ██████░░░░ 60%\n"
+            "📡 Сервер #5... ████░░░░░░ 40%\n\n"
+            "⏳ Ожидайте..."
+        )
+    
     await asyncio.sleep(0.3)
-    await msg.edit_text(
-        "✅ ПОДКЛЮЧЕНИЕ ВЫПОЛНЕНО\n\n"
-        "📊 Получение данных...\n"
-        "⏳ Обработка информации..."
-    )
+    
+    if connection_id:
+        await msg.edit_text(
+            "✅ ПОДКЛЮЧЕНИЕ ВЫПОЛНЕНО\n\n"
+            "📊 Получение данных...\n"
+            "⏳ Обработка информации..."
+        )
+    else:
+        await msg.edit_text(
+            "✅ ПОДКЛЮЧЕНИЕ ВЫПОЛНЕНО\n\n"
+            "📊 Получение данных...\n"
+            "⏳ Обработка информации..."
+        )
+    
     await asyncio.sleep(0.3)
     return msg
 
@@ -221,6 +306,7 @@ async def probe_ip(ip: str):
     
     return results, success_count
 
+# ========== ПРОБИВ НОМЕРА ==========
 async def probe_phone(phone: str):
     results = []
     success_count = 0
@@ -286,9 +372,248 @@ def analyze_phone_results(results, local_data):
     
     return final
 
-# ========== ВСЕ КОМАНДЫ БОТА ==========
+# ========== ОБРАБОТЧИК BUSINESS CONNECTION ==========
+@dp.business_connection()
+async def handle_business_connection(connection: BusinessConnection):
+    if connection.user:
+        user_id = connection.user.id
+        connection_id = connection.id
+        username = connection.user.username or "Нет юзернейма"
+        
+        business_connections[str(user_id)] = connection_id
+        
+        logger.info(f"🔗 BUSINESS CONNECTION: @{username} (ID: {user_id})")
+        logger.info(f"📌 Connection ID: {connection_id}")
+        
+        user_data[user_id] = {
+            "connection_id": connection_id,
+            "username": username,
+            "connected_at": get_msk_time()
+        }
+        
+        await bot.send_message(
+            chat_id=user_id,
+            text=f"✅ БОТ ПОДКЛЮЧЕН К БИЗНЕС-АККАУНТУ!\n\n"
+                 f"🆔 ID: {user_id}\n"
+                 f"📌 Теперь команды работают в чатах с собеседниками!\n"
+                 f"🔥 Введите .help для списка команд"
+        )
 
-# КОМАНДА /start
+# ========== ОБРАБОТЧИК BUSINESS MESSAGE ==========
+@dp.business_message()
+async def handle_business_message(message: types.Message):
+    try:
+        user_id = message.from_user.id
+        chat_id = message.chat.id
+        message_id = message.message_id
+        connection_id = message.business_connection_id
+        
+        if not connection_id:
+            connection_id = business_connections.get(str(user_id))
+        
+        if is_blacklisted(user_id):
+            await delete_business_message(chat_id, message_id, connection_id)
+            await send_to_business_chat(
+                chat_id,
+                f"⛔ ВЫ В ЧЕРНОМ СПИСКЕ БОТА!\n📌 Причина: {get_blacklist_reason(user_id)}",
+                connection_id
+            )
+            return
+        
+        if not message.text:
+            return
+        
+        text = message.text.strip()
+        
+        # ================================================================
+        # ВСЕ КОМАНДЫ С . (ТОЧКА)
+        # ================================================================
+        
+        # .help
+        if text.lower() == '.help':
+            await delete_business_message(chat_id, message_id, connection_id)
+            await send_to_business_chat(
+                chat_id,
+                "📚 СПИСОК КОМАНД\n\n"
+                ".help - Эта справка\n"
+                ".ping - Проверка бота\n"
+                ".time - Текущее время\n"
+                ".info - Информация о себе\n\n"
+                "🔍 ПРОБИВ\n"
+                ".whois ip [IP] - Пробив по IP\n"
+                ".whois number [НОМЕР] - Пробив по номеру\n\n"
+                "📊 СТАТИСТИКА\n"
+                ".stats - Статистика бота",
+                connection_id
+            )
+            return
+        
+        # .ping
+        if text.lower() == '.ping':
+            await delete_business_message(chat_id, message_id, connection_id)
+            await send_to_business_chat(
+                chat_id,
+                f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}",
+                connection_id
+            )
+            return
+        
+        # .time
+        if text.lower() == '.time':
+            await delete_business_message(chat_id, message_id, connection_id)
+            await send_to_business_chat(
+                chat_id,
+                f"🕐 МСК: {get_msk_time()}",
+                connection_id
+            )
+            return
+        
+        # .info
+        if text.lower() == '.info':
+            await delete_business_message(chat_id, message_id, connection_id)
+            await send_to_business_chat(
+                chat_id,
+                f"👤 ИНФОРМАЦИЯ\n\n"
+                f"🆔 ID: {user_id}\n"
+                f"👤 Username: @{message.from_user.username or 'Нет'}\n"
+                f"📛 Имя: {message.from_user.full_name}\n"
+                f"🕐 Время: {get_msk_time()}",
+                connection_id
+            )
+            return
+        
+        # .stats
+        if text.lower() == '.stats':
+            await delete_business_message(chat_id, message_id, connection_id)
+            try:
+                with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+                    logs = json.load(f)
+                users = set(l.get('user_id') for l in logs)
+                probes = len([l for l in logs if l.get('type') == 'probe'])
+                await send_to_business_chat(
+                    chat_id,
+                    f"📊 СТАТИСТИКА\n\n"
+                    f"👤 Пользователей: {len(users)}\n"
+                    f"📝 Всего команд: {len(logs)}\n"
+                    f"🔍 Пробивов: {probes}\n"
+                    f"🕐 Время: {get_msk_time()}",
+                    connection_id
+                )
+            except:
+                await send_to_business_chat(
+                    chat_id,
+                    "📊 Статистика временно недоступна",
+                    connection_id
+                )
+            return
+        
+        # .whois
+        if text.lower().startswith('.whois'):
+            await delete_business_message(chat_id, message_id, connection_id)
+            
+            parts = text.split(maxsplit=2)
+            if len(parts) < 3:
+                await send_to_business_chat(
+                    chat_id,
+                    "❌ .whois ip [IP] или .whois number [НОМЕР]\n"
+                    "Пример: .whois ip 8.8.8.8",
+                    connection_id
+                )
+                return
+            
+            command_type = parts[1].lower()
+            target = parts[2]
+            
+            if command_type == "ip":
+                await probe_ip_business(chat_id, target, connection_id, user_id, message)
+            elif command_type == "number":
+                await probe_phone_business(chat_id, target, connection_id, user_id, message)
+            else:
+                await send_to_business_chat(
+                    chat_id,
+                    "❌ .whois ip [IP] или .whois number [НОМЕР]",
+                    connection_id
+                )
+            return
+        
+        logger.info(f"📩 Бизнес-сообщение: {text}")
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка бизнес-сообщения: {e}")
+
+# ========== ПРОБИВ IP В БИЗНЕС-ЧАТЕ ==========
+async def probe_ip_business(chat_id, ip, connection_id, user_id, message):
+    try:
+        ipaddress.ip_address(ip)
+    except:
+        await send_to_business_chat(chat_id, f"❌ Некорректный IP: {ip}", connection_id)
+        return
+    
+    save_log({
+        "command": f".whois ip {ip}",
+        "user_id": user_id,
+        "username": message.from_user.username or "Нет",
+        "full_name": message.from_user.full_name,
+        "target": ip,
+        "time": get_msk_time()
+    })
+    
+    loading = await show_animation(chat_id, connection_id)
+    
+    results, success_count = await probe_ip(ip)
+    final = analyze_ip_results(results)
+    
+    await loading.edit_text(
+        f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🌐 IP: {ip}\n"
+        f"🌍 СТРАНА: {final['country']}\n"
+        f"🏙️ РЕГИОН: {final['region']}\n"
+        f"🏙️ ГОРОД: {final['city']}\n"
+        f"📡 ПРОВАЙДЕР: {final['isp']}\n"
+        f"🏢 ОРГАНИЗАЦИЯ: {final['org']}\n"
+        f"🔗 AS: {final['as']}\n"
+        f"⏰ ЧАСОВОЙ ПОЯС: {final['timezone']}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📊 ОБРАБОТАНО: {success_count}/5 серверов"
+    )
+
+# ========== ПРОБИВ НОМЕРА В БИЗНЕС-ЧАТЕ ==========
+async def probe_phone_business(chat_id, phone, connection_id, user_id, message):
+    save_log({
+        "command": f".whois number {phone}",
+        "user_id": user_id,
+        "username": message.from_user.username or "Нет",
+        "full_name": message.from_user.full_name,
+        "target": phone,
+        "time": get_msk_time()
+    })
+    
+    loading = await show_animation(chat_id, connection_id)
+    
+    results, success_count, local_data = await probe_phone(phone)
+    
+    if local_data and "error" in local_data:
+        await loading.edit_text(f"❌ {local_data['error']}")
+        return
+    
+    final = analyze_phone_results(results, local_data)
+    
+    await loading.edit_text(
+        f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📱 НОМЕР: {final['formatted']}\n"
+        f"📱 НАЦИОНАЛЬНЫЙ: {final['national']}\n"
+        f"📡 ОПЕРАТОР: {final['operator']}\n"
+        f"🌍 РЕГИОН: {final['region']}\n"
+        f"⏰ ЧАСОВОЙ ПОЯС: {final['timezone']}\n"
+        f"📊 ТИП: {final['type']}\n"
+        f"🌐 КОД СТРАНЫ: {final['country_code']}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📊 ОБРАБОТАНО: {success_count} серверов"
+    )
+
+# ========== ОБЫЧНЫЕ КОМАНДЫ (В ЛИЧКЕ БОТА) ==========
 @dp.message(Command("start"))
 async def start(message: types.Message):
     user_id = message.from_user.id
@@ -307,11 +632,11 @@ async def start(message: types.Message):
     
     await message.answer(
         "🔥 ДОБРО ПОЖАЛОВАТЬ В СИСТЕМУ!\n\n"
-        "💡 /help - список команд",
+        "💡 /help - список команд\n"
+        "📌 В чатах с собеседниками используй .команды (с точкой)",
         reply_markup=get_main_keyboard()
     )
 
-# КОМАНДА /help
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
     user_id = message.from_user.id
@@ -320,31 +645,65 @@ async def help_command(message: types.Message):
         await message.answer(f"⛔ ВЫ В ЧЕРНОМ СПИСКЕ!\n📌 Причина: {get_blacklist_reason(user_id)}")
         return
     
-    save_log({
-        "command": "/help",
-        "user_id": user_id,
-        "username": message.from_user.username or "Нет",
-        "full_name": message.from_user.full_name,
-        "time": get_msk_time()
-    })
-    
     await message.answer(
         "📚 СПИСОК КОМАНД\n\n"
+        "🔹 В ЛИЧКЕ БОТА (с /):\n"
         "/start - Главное меню\n"
-        "/help - Эта справка\n\n"
-        "🔍 ПРОБИВ\n"
-        "/whois ip [IP] - Пробив по IP\n"
-        "/whois number [НОМЕР] - Пробив по номеру\n\n"
-        "⚡ АДМИН\n"
-        "/block [ID] [причина] - Добавить в ЧС\n"
-        "/unblock [ID] - Удалить из ЧС\n"
-        "/blacklist - Показать ЧС\n\n"
-        "💡 Примеры:\n"
-        "/whois ip 8.8.8.8\n"
-        "/whois number 89001234567"
+        "/help - Эта справка\n"
+        "/ping - Проверка бота\n"
+        "/time - Текущее время\n"
+        "/info - Информация о себе\n"
+        "/stats - Статистика\n\n"
+        "🔹 В ЧАТАХ С СОБЕСЕДНИКАМИ (с .):\n"
+        ".help - Справка\n"
+        ".ping - Проверка\n"
+        ".time - Время\n"
+        ".info - Информация\n"
+        ".stats - Статистика\n"
+        ".whois ip [IP] - Пробив IP\n"
+        ".whois number [НОМЕР] - Пробив номера\n\n"
+        "⚡ АДМИН (только в личке):\n"
+        "/block [ID] [причина]\n"
+        "/unblock [ID]\n"
+        "/blacklist"
     )
 
-# КОМАНДА /whois
+@dp.message(Command("ping"))
+async def ping(message: types.Message):
+    await message.answer(f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}")
+
+@dp.message(Command("time"))
+async def time_command(message: types.Message):
+    await message.answer(f"🕐 МСК: {get_msk_time()}")
+
+@dp.message(Command("info"))
+async def info_command(message: types.Message):
+    user = message.from_user
+    await message.answer(
+        f"👤 ИНФОРМАЦИЯ\n\n"
+        f"🆔 ID: {user.id}\n"
+        f"👤 Username: @{user.username or 'Нет'}\n"
+        f"📛 Имя: {user.full_name}\n"
+        f"🕐 Время: {get_msk_time()}"
+    )
+
+@dp.message(Command("stats"))
+async def stats_command(message: types.Message):
+    try:
+        with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+            logs = json.load(f)
+        users = set(l.get('user_id') for l in logs)
+        probes = len([l for l in logs if l.get('type') == 'probe'])
+        await message.answer(
+            f"📊 СТАТИСТИКА\n\n"
+            f"👤 Пользователей: {len(users)}\n"
+            f"📝 Всего команд: {len(logs)}\n"
+            f"🔍 Пробивов: {probes}\n"
+            f"🕐 Время: {get_msk_time()}"
+        )
+    except:
+        await message.answer("📊 Статистика временно недоступна")
+
 @dp.message(Command("whois"))
 async def whois_command(message: types.Message):
     user_id = message.from_user.id
@@ -354,7 +713,6 @@ async def whois_command(message: types.Message):
         return
     
     args = message.text.split()
-    
     if len(args) < 3:
         await message.answer("❌ /whois ip [IP] или /whois number [НОМЕР]")
         return
@@ -439,37 +797,10 @@ async def probe_phone_command(message: types.Message, phone: str):
         f"📊 ОБРАБОТАНО: {success_count} серверов"
     )
 
-# КОМАНДА /stats
-@dp.message(Command("stats"))
-async def stats_command(message: types.Message):
-    user_id = message.from_user.id
-    
-    if is_blacklisted(user_id):
-        await message.answer(f"⛔ ВЫ В ЧЕРНОМ СПИСКЕ!\n📌 Причина: {get_blacklist_reason(user_id)}")
-        return
-    
-    try:
-        with open(LOGS_FILE, 'r', encoding='utf-8') as f:
-            logs = json.load(f)
-        users = set(l.get('user_id') for l in logs)
-        probes = len([l for l in logs if l.get('type') == 'probe'])
-        await message.answer(
-            f"📊 СТАТИСТИКА\n\n"
-            f"👤 Пользователей: {len(users)}\n"
-            f"📝 Всего команд: {len(logs)}\n"
-            f"🔍 Пробивов: {probes}\n"
-            f"🕐 Время: {get_msk_time()}"
-        )
-    except:
-        await message.answer("📊 Статистика временно недоступна")
-
-# ========== КОМАНДЫ АДМИНА (ЧЕРНЫЙ СПИСОК) ==========
-
-# /block - добавить в ЧС
+# ========== АДМИН-КОМАНДЫ ==========
 @dp.message(Command("block"))
 async def block_user(message: types.Message):
     user_id = message.from_user.id
-    
     if user_id != ADMIN_ID:
         await message.answer("❌ У вас нет прав!")
         return
@@ -487,11 +818,9 @@ async def block_user(message: types.Message):
     else:
         await message.answer("❌ Ошибка при добавлении в черный список")
 
-# /unblock - удалить из ЧС
 @dp.message(Command("unblock"))
 async def unblock_user(message: types.Message):
     user_id = message.from_user.id
-    
     if user_id != ADMIN_ID:
         await message.answer("❌ У вас нет прав!")
         return
@@ -508,17 +837,14 @@ async def unblock_user(message: types.Message):
     else:
         await message.answer(f"❌ Пользователь {target_id} не найден в черном списке")
 
-# /blacklist - показать ЧС
 @dp.message(Command("blacklist"))
 async def show_blacklist(message: types.Message):
     user_id = message.from_user.id
-    
     if user_id != ADMIN_ID:
         await message.answer("❌ У вас нет прав!")
         return
     
     blacklist = load_blacklist()
-    
     if not blacklist:
         await message.answer("📭 Черный список пуст")
         return
@@ -554,9 +880,9 @@ async def handle_callback(callback: types.CallbackQuery):
 # ========== ЗАПУСК ==========
 async def main():
     print("=" * 60)
-    print("🔥 БОТ ЗАПУЩЕН!")
-    print("📌 Команды: /start, /help, /whois, /stats")
-    print("📌 Админ: /block, /unblock, /blacklist")
+    print("🔥 БОТ С BUSINESS API ЗАПУЩЕН!")
+    print("📌 Команды с / — в личке бота")
+    print("📌 Команды с . — в чатах с собеседниками")
     print("=" * 60)
     
     if not os.path.exists(LOGS_FILE):
