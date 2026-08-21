@@ -207,3 +207,4 @@ function loadData() {
 }
 
 console.log('🚀 ADMIN PANEL LOADED');
+console.log('📌 Загружаем только логи (черный список через бота)');
