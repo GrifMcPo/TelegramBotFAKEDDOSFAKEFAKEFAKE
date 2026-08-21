@@ -14,9 +14,7 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-# ========== ПРАВИЛЬНЫЙ ИМПОРТ BUSINESS CONNECTION ==========
-from aiogram.types.business_connection import BusinessConnection
+from aiogram.types import BusinessConnection
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,7 +38,7 @@ BRANCH = "main"
 
 # ========== ХРАНИЛИЩЕ ==========
 user_data = {}
-business_connections = {}  # {user_id: connection_id}
+business_connections = {}
 
 def get_msk_time():
     return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
@@ -195,7 +193,6 @@ def get_main_keyboard():
 
 # ========== АНИМАЦИЯ ==========
 async def show_animation(target, connection_id=None):
-    """Показывает анимацию подключения"""
     if connection_id:
         msg = await send_to_business_chat(
             target,
@@ -429,10 +426,9 @@ async def handle_business_message(message: types.Message):
         text = message.text.strip()
         
         # ================================================================
-        # ВСЕ КОМАНДЫ С . (ТОЧКА)
+        # КОМАНДЫ С . (ТОЧКА) В БИЗНЕС-ЧАТАХ
         # ================================================================
         
-        # .help
         if text.lower() == '.help':
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(
@@ -451,7 +447,6 @@ async def handle_business_message(message: types.Message):
             )
             return
         
-        # .ping
         if text.lower() == '.ping':
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(
@@ -461,7 +456,6 @@ async def handle_business_message(message: types.Message):
             )
             return
         
-        # .time
         if text.lower() == '.time':
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(
@@ -471,7 +465,6 @@ async def handle_business_message(message: types.Message):
             )
             return
         
-        # .info
         if text.lower() == '.info':
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(
@@ -485,7 +478,6 @@ async def handle_business_message(message: types.Message):
             )
             return
         
-        # .stats
         if text.lower() == '.stats':
             await delete_business_message(chat_id, message_id, connection_id)
             try:
@@ -510,7 +502,6 @@ async def handle_business_message(message: types.Message):
                 )
             return
         
-        # .whois
         if text.lower().startswith('.whois'):
             await delete_business_message(chat_id, message_id, connection_id)
             
@@ -544,7 +535,7 @@ async def handle_business_message(message: types.Message):
     except Exception as e:
         logger.error(f"❌ Ошибка бизнес-сообщения: {e}")
 
-# ========== ПРОБИВ IP В БИЗНЕС-ЧАТЕ ==========
+# ========== ПРОБИВ В БИЗНЕС-ЧАТЕ ==========
 async def probe_ip_business(chat_id, ip, connection_id, user_id, message):
     try:
         ipaddress.ip_address(ip)
@@ -581,7 +572,6 @@ async def probe_ip_business(chat_id, ip, connection_id, user_id, message):
         f"📊 ОБРАБОТАНО: {success_count}/5 серверов"
     )
 
-# ========== ПРОБИВ НОМЕРА В БИЗНЕС-ЧАТЕ ==========
 async def probe_phone_business(chat_id, phone, connection_id, user_id, message):
     save_log({
         "command": f".whois number {phone}",
