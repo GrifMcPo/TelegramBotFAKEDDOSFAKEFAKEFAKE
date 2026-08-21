@@ -282,7 +282,7 @@ async def show_animation(target, connection_id=None):
     await asyncio.sleep(0.4)
     return msg
 
-# ========== ПРОБИВ IP (ИСПРАВЛЕННЫЙ) ==========
+# ========== ПРОБИВ IP ==========
 async def probe_ip(ip: str):
     results = []
     success_count = 0
@@ -309,31 +309,115 @@ async def probe_ip(ip: str):
     
     return results, success_count
 
-# ========== ПРОБИВ НОМЕРА (ИСПРАВЛЕННЫЙ!) ==========
+# ========== ПРОБИВ НОМЕРА (УЛУЧШЕННЫЙ!) ==========
 async def probe_phone(phone: str):
     results = []
     success_count = 0
     local_data = None
     
-    phone_clean = phone.replace('+', '').replace('-', '').replace('(', '').replace(')', '').replace(' ', '')
+    # Очищаем номер от лишних символов
+    phone_clean = re.sub(r'[^\d+]', '', phone)
+    
+    # Если номер начинается с 8 в России - заменяем на +7
+    if phone_clean.startswith('8') and len(phone_clean) == 11:
+        phone_clean = '+7' + phone_clean[1:]
+    elif not phone_clean.startswith('+'):
+        phone_clean = '+' + phone_clean
     
     try:
-        # Парсим номер
-        parsed = phonenumbers.parse(phone_clean, None)
+        # Парсим номер с указанием региона RU для лучшего определения
+        parsed = phonenumbers.parse(phone_clean, "RU")
         
         if not phonenumbers.is_valid_number(parsed):
             return [], 0, {"error": "❌ Номер не существует или введен неверно"}
         
-        # Получаем все данные
-        operator = carrier.name_for_number(parsed, "ru") or "Не определен"
-        region = geocoder.description_for_number(parsed, "ru") or "Не определен"
+        # Получаем все доступные данные
+        # Оператор
+        operator = carrier.name_for_number(parsed, "ru")
+        if not operator:
+            # Пробуем определить оператора по коду страны и префиксу
+            national_number = str(parsed.national_number)
+            country_code = parsed.country_code
+            
+            # База российских операторов (первые 3-4 цифры номера)
+            russian_operators = {
+                '910': 'МТС', '911': 'МТС', '912': 'МТС', '913': 'МТС', '914': 'МТС',
+                '915': 'МТС', '916': 'МТС', '917': 'МТС', '918': 'МТС', '919': 'МТС',
+                '980': 'МТС', '981': 'МТС', '982': 'МТС', '983': 'МТС', '984': 'МТС',
+                '985': 'МТС', '986': 'МТС', '987': 'МТС', '988': 'МТС', '989': 'МТС',
+                '902': 'МТС', '903': 'МТС', '904': 'МТС', '905': 'МТС', '906': 'МТС',
+                '908': 'МТС', '909': 'МТС', '960': 'МТС', '961': 'МТС', '962': 'МТС',
+                '963': 'МТС', '964': 'МТС', '965': 'МТС', '966': 'МТС', '967': 'МТС',
+                '968': 'МТС', '969': 'МТС', '990': 'МТС', '991': 'МТС', '992': 'МТС',
+                '993': 'МТС', '994': 'МТС', '995': 'МТС', '996': 'МТС', '999': 'МТС',
+                '920': 'Мегафон', '921': 'Мегафон', '922': 'Мегафон', '923': 'Мегафон',
+                '924': 'Мегафон', '925': 'Мегафон', '926': 'Мегафон', '927': 'Мегафон',
+                '928': 'Мегафон', '929': 'Мегафон', '930': 'Мегафон', '931': 'Мегафон',
+                '932': 'Мегафон', '933': 'Мегафон', '934': 'Мегафон', '935': 'Мегафон',
+                '936': 'Мегафон', '937': 'Мегафон', '938': 'Мегафон', '939': 'Мегафон',
+                '940': 'Мегафон', '941': 'Мегафон', '942': 'Мегафон', '943': 'Мегафон',
+                '944': 'Мегафон', '945': 'Мегафон', '946': 'Мегафон', '947': 'Мегафон',
+                '948': 'Мегафон', '949': 'Мегафон', '950': 'Мегафон', '951': 'Мегафон',
+                '952': 'Мегафон', '953': 'Мегафон', '954': 'Мегафон', '955': 'Мегафон',
+                '956': 'Мегафон', '957': 'Мегафон', '958': 'Мегафон', '959': 'Мегафон',
+                '900': 'Билайн', '901': 'Билайн', '902': 'Билайн', '903': 'Билайн',
+                '904': 'Билайн', '905': 'Билайн', '906': 'Билайн', '907': 'Билайн',
+                '908': 'Билайн', '909': 'Билайн', '950': 'Билайн', '951': 'Билайн',
+                '952': 'Билайн', '953': 'Билайн', '954': 'Билайн', '955': 'Билайн',
+                '956': 'Билайн', '957': 'Билайн', '958': 'Билайн', '959': 'Билайн',
+                '960': 'Билайн', '961': 'Билайн', '962': 'Билайн', '963': 'Билайн',
+                '964': 'Билайн', '965': 'Билайн', '966': 'Билайн', '967': 'Билайн',
+                '968': 'Билайн', '969': 'Билайн', '970': 'Билайн', '971': 'Билайн',
+                '972': 'Билайн', '973': 'Билайн', '974': 'Билайн', '975': 'Билайн',
+                '976': 'Билайн', '977': 'Билайн', '978': 'Билайн', '979': 'Билайн',
+                '980': 'Билайн', '981': 'Билайн', '982': 'Билайн', '983': 'Билайн',
+                '984': 'Билайн', '985': 'Билайн', '986': 'Билайн', '987': 'Билайн',
+                '988': 'Билайн', '989': 'Билайн',
+                '909': 'TELE2', '950': 'TELE2', '951': 'TELE2', '952': 'TELE2',
+                '953': 'TELE2', '954': 'TELE2', '955': 'TELE2', '956': 'TELE2',
+                '957': 'TELE2', '958': 'TELE2', '959': 'TELE2', '960': 'TELE2',
+                '961': 'TELE2', '962': 'TELE2', '963': 'TELE2', '964': 'TELE2',
+                '965': 'TELE2', '966': 'TELE2', '967': 'TELE2', '968': 'TELE2',
+                '969': 'TELE2', '970': 'TELE2', '971': 'TELE2', '972': 'TELE2',
+                '973': 'TELE2', '974': 'TELE2', '975': 'TELE2', '976': 'TELE2',
+                '977': 'TELE2', '978': 'TELE2', '979': 'TELE2', '980': 'TELE2',
+                '981': 'TELE2', '982': 'TELE2', '983': 'TELE2', '984': 'TELE2',
+                '985': 'TELE2', '986': 'TELE2', '987': 'TELE2', '988': 'TELE2',
+                '989': 'TELE2', '900': 'TELE2', '901': 'TELE2', '902': 'TELE2',
+                '903': 'TELE2', '904': 'TELE2', '905': 'TELE2', '906': 'TELE2',
+                '907': 'TELE2', '908': 'TELE2', '909': 'TELE2'
+            }
+            
+            # Определяем оператора по первым 3 цифрам номера
+            if country_code == 7 and len(national_number) >= 3:
+                prefix = national_number[:3]
+                if prefix in russian_operators:
+                    operator = russian_operators[prefix]
+                elif len(national_number) >= 4:
+                    prefix_4 = national_number[:4]
+                    if prefix_4 in russian_operators:
+                        operator = russian_operators[prefix_4]
+        
+        if not operator:
+            operator = "Не определен"
+        
+        # Регион
+        region = geocoder.description_for_number(parsed, "ru")
+        if not region:
+            # Пробуем определить регион по коду города (для стационарных)
+            region = "Не определен"
+        
+        # Часовой пояс
         timezone_info = timezone.time_zones_for_number(parsed)
-        phone_type = phonenumbers.number_type(parsed)
-        formatted = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
-        national = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.NATIONAL)
-        country_code = parsed.country_code
+        if not timezone_info:
+            # Определяем по стране
+            if parsed.country_code == 7:
+                timezone_info = ['Europe/Moscow']
+            else:
+                timezone_info = ['Не определен']
         
         # Тип номера
+        phone_type = phonenumbers.number_type(parsed)
         type_names = {
             0: "Неизвестный",
             1: "Стационарный",
@@ -345,6 +429,21 @@ async def probe_phone(phone: str):
             7: "Pager"
         }
         
+        # Форматирование
+        formatted = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
+        national = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.NATIONAL)
+        
+        # Определение страны по коду
+        country_codes = {
+            1: 'US/CA', 7: 'RU', 44: 'GB', 49: 'DE', 33: 'FR', 39: 'IT',
+            34: 'ES', 86: 'CN', 81: 'JP', 82: 'KR', 91: 'IN', 55: 'BR',
+            61: 'AU', 31: 'NL', 32: 'BE', 41: 'CH', 46: 'SE', 47: 'NO',
+            45: 'DK', 358: 'FI', 48: 'PL', 420: 'CZ', 36: 'HU', 40: 'RO',
+            30: 'GR', 351: 'PT', 353: 'IE', 972: 'IL', 966: 'SA', 971: 'AE',
+            65: 'SG', 60: 'MY', 62: 'ID', 63: 'PH', 66: 'TH', 84: 'VN'
+        }
+        country_name = country_codes.get(parsed.country_code, f"+{parsed.country_code}")
+        
         local_data = {
             "formatted": formatted,
             "national": national,
@@ -352,31 +451,34 @@ async def probe_phone(phone: str):
             "region": region,
             "timezone": ', '.join(timezone_info) if timezone_info else "Не определен",
             "type": type_names.get(phone_type, "Неизвестный"),
-            "country_code": f"+{country_code}",
+            "country_code": f"+{parsed.country_code}",
+            "country": country_name,
             "valid": True
         }
         results.append(local_data)
         success_count += 1
         
-    except phonenumbers.NumberParseException:
-        return [], 0, {"error": "❌ Некорректный формат номера\nПример: 89001234567 или +79001234567"}
+    except phonenumbers.NumberParseException as e:
+        return [], 0, {"error": f"❌ Некорректный формат номера\nПример: 89001234567 или +79001234567"}
     except Exception as e:
         logger.error(f"❌ Ошибка парсинга номера: {e}")
         return [], 0, {"error": f"❌ Ошибка: {str(e)}"}
     
-    # Пробуем внешние API (если есть)
-    phone_apis = [
-        {"name": "Сервер #2", "url": f"https://api.numverify.com/validate?number={phone_clean}&access_key=YOUR_KEY"},
-        {"name": "Сервер #3", "url": f"https://phonevalidation.abstractapi.com/v1/?api_key=YOUR_KEY&phone={phone_clean}"},
-    ]
-    
-    for api in phone_apis:
+    # Дополнительный запрос на API для получения оператора (если не удалось определить локально)
+    if operator == "Не определен" or region == "Не определен":
         try:
-            response = requests.get(api["url"], timeout=3)
+            # Используем бесплатный API для определения оператора
+            api_url = f"https://api.veriphone.io/v2/verify?phone={phone_clean}&default_country=RU"
+            response = requests.get(api_url, timeout=5)
             if response.status_code == 200:
                 data = response.json()
-                success_count += 1
-                results.append({"source": api["name"], "data": data})
+                if data.get('phone_valid', False):
+                    success_count += 1
+                    results.append({"source": "Сервер #6 (Veriphone)", "data": data})
+                    if data.get('carrier') and operator == "Не определен":
+                        operator = data['carrier']
+                    if data.get('location') and region == "Не определен":
+                        region = data['location']
         except:
             pass
     
@@ -423,13 +525,27 @@ def analyze_phone_results(results, local_data):
         "region": "Не определено",
         "timezone": "Не определено",
         "type": "Не определено",
-        "country_code": "Не определено"
+        "country_code": "Не определено",
+        "country": "Не определено"
     }
     
+    # Сначала берем данные из локального парсинга
     if local_data:
         for key in final.keys():
-            if key in local_data:
+            if key in local_data and local_data[key]:
                 final[key] = local_data[key]
+    
+    # Дополнительно ищем в результатах API
+    for result in results:
+        data = result.get("data", {})
+        if isinstance(data, dict):
+            # Veriphone API
+            if "carrier" in data and data["carrier"] and final["operator"] == "Не определено":
+                final["operator"] = data["carrier"]
+            if "location" in data and data["location"] and final["region"] == "Не определено":
+                final["region"] = data["location"]
+            if "country_code" in data and data["country_code"]:
+                final["country_code"] = f"+{data['country_code']}"
     
     return final
 
@@ -450,7 +566,6 @@ async def handle_business_connection(connection: BusinessConnection):
         connection_id = connection.id
         username = connection.user.username or "Нет юзернейма"
         
-        # Только админ может подключить бизнес-бота!
         if not is_admin(user_id):
             await bot.send_message(
                 chat_id=user_id,
@@ -480,7 +595,6 @@ async def handle_business_message(message: types.Message):
         message_id = message.message_id
         connection_id = message.business_connection_id
         
-        # Только админ может использовать бизнес-бота!
         if not is_admin(user_id):
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(
@@ -512,9 +626,7 @@ async def handle_business_message(message: types.Message):
         
         text = message.text.strip()
         
-        # ============================================================
-        # .ban (id) (time) (reason)
-        # ============================================================
+        # .ban
         if text.lower().startswith('.ban'):
             await delete_business_message(chat_id, message_id, connection_id)
             
@@ -554,9 +666,7 @@ async def handle_business_message(message: types.Message):
             logger.info(f"🔨 Бан: {target_id} от {user_id} на {time_minutes} мин")
             return
         
-        # ============================================================
         # .unban
-        # ============================================================
         if text.lower().startswith('.unban'):
             await delete_business_message(chat_id, message_id, connection_id)
             
@@ -594,9 +704,7 @@ async def handle_business_message(message: types.Message):
                 )
             return
         
-        # ============================================================
         # .help
-        # ============================================================
         if text.lower() == '.help':
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(
@@ -618,25 +726,19 @@ async def handle_business_message(message: types.Message):
             )
             return
         
-        # ============================================================
         # .ping
-        # ============================================================
         if text.lower() == '.ping':
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(chat_id, f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}", connection_id)
             return
         
-        # ============================================================
         # .time
-        # ============================================================
         if text.lower() == '.time':
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(chat_id, f"🕐 МСК: {get_msk_time()}", connection_id)
             return
         
-        # ============================================================
         # .info
-        # ============================================================
         if text.lower() == '.info':
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(
@@ -650,9 +752,7 @@ async def handle_business_message(message: types.Message):
             )
             return
         
-        # ============================================================
         # .stats
-        # ============================================================
         if text.lower() == '.stats':
             await delete_business_message(chat_id, message_id, connection_id)
             try:
@@ -673,9 +773,7 @@ async def handle_business_message(message: types.Message):
                 await send_to_business_chat(chat_id, "📊 Статистика временно недоступна", connection_id)
             return
         
-        # ============================================================
-        # .whois ip
-        # ============================================================
+        # .whois
         if text.lower().startswith('.whois'):
             await delete_business_message(chat_id, message_id, connection_id)
             
@@ -773,8 +871,9 @@ async def probe_phone_business(chat_id, phone, connection_id, user_id, message):
         f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📱 НОМЕР: {final['formatted']}\n"
+        f"🌍 СТРАНА: {final['country']}\n"
         f"📡 ОПЕРАТОР: {final['operator']}\n"
-        f"🌍 РЕГИОН: {final['region']}\n"
+        f"🏙️ РЕГИОН: {final['region']}\n"
         f"⏰ ЧАСОВОЙ ПОЯС: {final['timezone']}\n"
         f"📊 ТИП: {final['type']}\n"
         f"🌐 КОД СТРАНЫ: {final['country_code']}\n"
@@ -910,9 +1009,6 @@ async def stats_command(message: types.Message):
     except:
         await message.answer("📊 Статистика временно недоступна")
 
-# ============================================================
-# /whois ip - ПРОБИВ IP В ЛИЧКЕ
-# ============================================================
 @dp.message(Command("whois"))
 async def whois_command(message: types.Message):
     user_id = message.from_user.id
@@ -939,9 +1035,6 @@ async def whois_command(message: types.Message):
     else:
         await message.answer("❌ Используйте: /whois ip [IP] или /whois number [НОМЕР]")
 
-# ============================================================
-# ПРОБИВ IP В ЛИЧКЕ
-# ============================================================
 async def probe_ip_command(message: types.Message, ip: str):
     try:
         ipaddress.ip_address(ip)
@@ -980,9 +1073,6 @@ async def probe_ip_command(message: types.Message, ip: str):
         f"📊 ОБРАБОТАНО: {success_count}/5 серверов"
     )
 
-# ============================================================
-# ПРОБИВ НОМЕРА В ЛИЧКЕ (ИСПРАВЛЕННЫЙ!)
-# ============================================================
 async def probe_phone_command(message: types.Message, phone: str):
     save_log({
         "command": f"/whois number {phone}",
@@ -1009,9 +1099,9 @@ async def probe_phone_command(message: types.Message, phone: str):
         f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📱 НОМЕР: {final['formatted']}\n"
-        f"📱 НАЦИОНАЛЬНЫЙ: {final['national']}\n"
+        f"🌍 СТРАНА: {final['country']}\n"
         f"📡 ОПЕРАТОР: {final['operator']}\n"
-        f"🌍 РЕГИОН: {final['region']}\n"
+        f"🏙️ РЕГИОН: {final['region']}\n"
         f"⏰ ЧАСОВОЙ ПОЯС: {final['timezone']}\n"
         f"📊 ТИП: {final['type']}\n"
         f"🌐 КОД СТРАНЫ: {final['country_code']}\n"
@@ -1019,9 +1109,6 @@ async def probe_phone_command(message: types.Message, phone: str):
         f"📊 ОБРАБОТАНО: {success_count} серверов"
     )
 
-# ============================================================
-# АДМИН-КОМАНДЫ В ЛИЧКЕ
-# ============================================================
 @dp.message(Command("ban"))
 async def ban_command(message: types.Message):
     user_id = message.from_user.id    
@@ -1083,9 +1170,6 @@ async def unban_command(message: types.Message):
     else:
         await message.answer(f"❌ Пользователь {target_id} не найден в черном списке")
 
-# ============================================================
-# ОБРАБОТЧИК ДЛЯ ЛЮБЫХ СООБЩЕНИЙ В ЛИЧКЕ
-# ============================================================
 @dp.message()
 async def handle_private_message(message: types.Message):
     user_id = message.from_user.id
@@ -1118,9 +1202,6 @@ async def handle_private_message(message: types.Message):
         "📌 В чатах с собеседниками используй .команды"
     )
 
-# ============================================================
-# КНОПКИ
-# ============================================================
 @dp.callback_query()
 async def handle_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -1145,9 +1226,6 @@ async def handle_callback(callback: types.CallbackQuery):
         await stats_command(callback.message)
         await callback.answer()
 
-# ============================================================
-# ЗАПУСК
-# ============================================================
 async def main():
     print("=" * 60)
     print("🔥 БОТ ЗАПУЩЕН!")
