@@ -315,31 +315,24 @@ async def probe_phone(phone: str):
     success_count = 0
     local_data = None
     
-    # Очищаем номер от лишних символов
     phone_clean = re.sub(r'[^\d+]', '', phone)
     
-    # Если номер начинается с 8 в России - заменяем на +7
     if phone_clean.startswith('8') and len(phone_clean) == 11:
         phone_clean = '+7' + phone_clean[1:]
     elif not phone_clean.startswith('+'):
         phone_clean = '+' + phone_clean
     
     try:
-        # Парсим номер с указанием региона RU для лучшего определения
         parsed = phonenumbers.parse(phone_clean, "RU")
         
         if not phonenumbers.is_valid_number(parsed):
             return [], 0, {"error": "❌ Номер не существует или введен неверно"}
         
-        # Получаем все доступные данные
-        # Оператор
         operator = carrier.name_for_number(parsed, "ru")
         if not operator:
-            # Пробуем определить оператора по коду страны и префиксу
             national_number = str(parsed.national_number)
             country_code = parsed.country_code
             
-            # База российских операторов (первые 3-4 цифры номера)
             russian_operators = {
                 '910': 'МТС', '911': 'МТС', '912': 'МТС', '913': 'МТС', '914': 'МТС',
                 '915': 'МТС', '916': 'МТС', '917': 'МТС', '918': 'МТС', '919': 'МТС',
@@ -373,22 +366,21 @@ async def probe_phone(phone: str):
                 '980': 'Билайн', '981': 'Билайн', '982': 'Билайн', '983': 'Билайн',
                 '984': 'Билайн', '985': 'Билайн', '986': 'Билайн', '987': 'Билайн',
                 '988': 'Билайн', '989': 'Билайн',
-                '909': 'TELE2', '950': 'TELE2', '951': 'TELE2', '952': 'TELE2',
-                '953': 'TELE2', '954': 'TELE2', '955': 'TELE2', '956': 'TELE2',
-                '957': 'TELE2', '958': 'TELE2', '959': 'TELE2', '960': 'TELE2',
-                '961': 'TELE2', '962': 'TELE2', '963': 'TELE2', '964': 'TELE2',
-                '965': 'TELE2', '966': 'TELE2', '967': 'TELE2', '968': 'TELE2',
-                '969': 'TELE2', '970': 'TELE2', '971': 'TELE2', '972': 'TELE2',
-                '973': 'TELE2', '974': 'TELE2', '975': 'TELE2', '976': 'TELE2',
-                '977': 'TELE2', '978': 'TELE2', '979': 'TELE2', '980': 'TELE2',
-                '981': 'TELE2', '982': 'TELE2', '983': 'TELE2', '984': 'TELE2',
-                '985': 'TELE2', '986': 'TELE2', '987': 'TELE2', '988': 'TELE2',
-                '989': 'TELE2', '900': 'TELE2', '901': 'TELE2', '902': 'TELE2',
-                '903': 'TELE2', '904': 'TELE2', '905': 'TELE2', '906': 'TELE2',
-                '907': 'TELE2', '908': 'TELE2', '909': 'TELE2'
+                '900': 'TELE2', '901': 'TELE2', '902': 'TELE2', '903': 'TELE2',
+                '904': 'TELE2', '905': 'TELE2', '906': 'TELE2', '907': 'TELE2',
+                '908': 'TELE2', '909': 'TELE2', '950': 'TELE2', '951': 'TELE2',
+                '952': 'TELE2', '953': 'TELE2', '954': 'TELE2', '955': 'TELE2',
+                '956': 'TELE2', '957': 'TELE2', '958': 'TELE2', '959': 'TELE2',
+                '960': 'TELE2', '961': 'TELE2', '962': 'TELE2', '963': 'TELE2',
+                '964': 'TELE2', '965': 'TELE2', '966': 'TELE2', '967': 'TELE2',
+                '968': 'TELE2', '969': 'TELE2', '970': 'TELE2', '971': 'TELE2',
+                '972': 'TELE2', '973': 'TELE2', '974': 'TELE2', '975': 'TELE2',
+                '976': 'TELE2', '977': 'TELE2', '978': 'TELE2', '979': 'TELE2',
+                '980': 'TELE2', '981': 'TELE2', '982': 'TELE2', '983': 'TELE2',
+                '984': 'TELE2', '985': 'TELE2', '986': 'TELE2', '987': 'TELE2',
+                '988': 'TELE2', '989': 'TELE2'
             }
             
-            # Определяем оператора по первым 3 цифрам номера
             if country_code == 7 and len(national_number) >= 3:
                 prefix = national_number[:3]
                 if prefix in russian_operators:
@@ -401,22 +393,17 @@ async def probe_phone(phone: str):
         if not operator:
             operator = "Не определен"
         
-        # Регион
         region = geocoder.description_for_number(parsed, "ru")
         if not region:
-            # Пробуем определить регион по коду города (для стационарных)
             region = "Не определен"
         
-        # Часовой пояс
         timezone_info = timezone.time_zones_for_number(parsed)
         if not timezone_info:
-            # Определяем по стране
             if parsed.country_code == 7:
                 timezone_info = ['Europe/Moscow']
             else:
                 timezone_info = ['Не определен']
         
-        # Тип номера
         phone_type = phonenumbers.number_type(parsed)
         type_names = {
             0: "Неизвестный",
@@ -429,11 +416,9 @@ async def probe_phone(phone: str):
             7: "Pager"
         }
         
-        # Форматирование
         formatted = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
         national = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.NATIONAL)
         
-        # Определение страны по коду
         country_codes = {
             1: 'US/CA', 7: 'RU', 44: 'GB', 49: 'DE', 33: 'FR', 39: 'IT',
             34: 'ES', 86: 'CN', 81: 'JP', 82: 'KR', 91: 'IN', 55: 'BR',
@@ -464,10 +449,8 @@ async def probe_phone(phone: str):
         logger.error(f"❌ Ошибка парсинга номера: {e}")
         return [], 0, {"error": f"❌ Ошибка: {str(e)}"}
     
-    # Дополнительный запрос на API для получения оператора (если не удалось определить локально)
     if operator == "Не определен" or region == "Не определен":
         try:
-            # Используем бесплатный API для определения оператора
             api_url = f"https://api.veriphone.io/v2/verify?phone={phone_clean}&default_country=RU"
             response = requests.get(api_url, timeout=5)
             if response.status_code == 200:
@@ -475,10 +458,6 @@ async def probe_phone(phone: str):
                 if data.get('phone_valid', False):
                     success_count += 1
                     results.append({"source": "Сервер #6 (Veriphone)", "data": data})
-                    if data.get('carrier') and operator == "Не определен":
-                        operator = data['carrier']
-                    if data.get('location') and region == "Не определен":
-                        region = data['location']
         except:
             pass
     
@@ -529,17 +508,14 @@ def analyze_phone_results(results, local_data):
         "country": "Не определено"
     }
     
-    # Сначала берем данные из локального парсинга
     if local_data:
         for key in final.keys():
             if key in local_data and local_data[key]:
                 final[key] = local_data[key]
     
-    # Дополнительно ищем в результатах API
     for result in results:
         data = result.get("data", {})
         if isinstance(data, dict):
-            # Veriphone API
             if "carrier" in data and data["carrier"] and final["operator"] == "Не определено":
                 final["operator"] = data["carrier"]
             if "location" in data and data["location"] and final["region"] == "Не определено":
@@ -566,12 +542,10 @@ async def handle_business_connection(connection: BusinessConnection):
         connection_id = connection.id
         username = connection.user.username or "Нет юзернейма"
         
+        # ТОЛЬКО АДМИН МОЖЕТ ПОДКЛЮЧИТЬ БИЗНЕС-БОТА!
         if not is_admin(user_id):
-            await bot.send_message(
-                chat_id=user_id,
-                text="❌ У вас нет прав на подключение бизнес-бота!\n"
-                     "Только администратор может использовать эту функцию."
-            )
+            # ПРОСТО ИГНОРИРУЕМ, НИЧЕГО НЕ ОТПРАВЛЯЕМ!
+            logger.info(f"🔒 Неавторизованная попытка бизнес-подключения: {user_id}")
             return
         
         business_connections[str(user_id)] = connection_id
@@ -595,13 +569,10 @@ async def handle_business_message(message: types.Message):
         message_id = message.message_id
         connection_id = message.business_connection_id
         
+        # ТОЛЬКО АДМИН МОЖЕТ ИСПОЛЬЗОВАТЬ БИЗНЕС-БОТА!
         if not is_admin(user_id):
+            # УДАЛЯЕМ СООБЩЕНИЕ И ТИХО ИГНОРИРУЕМ - НИКАКИХ УВЕДОМЛЕНИЙ!
             await delete_business_message(chat_id, message_id, connection_id)
-            await send_to_business_chat(
-                chat_id,
-                "❌ У вас нет прав на использование бизнес-бота!",
-                connection_id
-            )
             return
         
         if not connection_id:
@@ -629,10 +600,6 @@ async def handle_business_message(message: types.Message):
         # .ban
         if text.lower().startswith('.ban'):
             await delete_business_message(chat_id, message_id, connection_id)
-            
-            if not is_admin(user_id):
-                await send_to_business_chat(chat_id, "❌ У вас нет прав на бан!", connection_id)
-                return
             
             parts = text.split(maxsplit=3)
             if len(parts) < 3:
@@ -669,10 +636,6 @@ async def handle_business_message(message: types.Message):
         # .unban
         if text.lower().startswith('.unban'):
             await delete_business_message(chat_id, message_id, connection_id)
-            
-            if not is_admin(user_id):
-                await send_to_business_chat(chat_id, "❌ У вас нет прав на разбан!", connection_id)
-                return
             
             parts = text.split(maxsplit=2)
             if len(parts) < 2:
