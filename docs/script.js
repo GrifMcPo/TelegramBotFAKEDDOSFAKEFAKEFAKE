@@ -6,8 +6,8 @@ const VALID_KEYS = [
     'MASTER!KEY!QWERTY123'
 ];
 
+// ТОЛЬКО RAW (БЕЗ API)
 const DATA_URL = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/';
-const API_URL = 'https://api.github.com/repos/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/contents/';
 
 let logsData = [];
 let blacklistData = {};
@@ -66,7 +66,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     });
 });
 
-// ========== ЗАГРУЗКА ==========
+// ========== ЗАГРУЗКА ДАННЫХ ==========
 async function loadAllData() {
     await loadLogs();
     await loadBlacklist();
@@ -243,147 +243,14 @@ function closeChat() {
     if (modal) modal.classList.remove('active');
 }
 
-// ========== АЛИАС ДЛЯ КНОПКИ ОБНОВЛЕНИЯ ==========
+// ========== АЛИАС ДЛЯ КНОПКИ ==========
 function loadData() {
     loadAllData();
 }
 
-// ========== ЧЕРНЫЙ СПИСОК (ДОБАВЛЕНИЕ/УДАЛЕНИЕ) ==========
-document.getElementById('blockBtn').addEventListener('click', async function() {
-    const userId = document.getElementById('blockUserId').value.trim();
-    const reason = document.getElementById('blockReason').value.trim();
-    const messageDiv = document.getElementById('blockMessage');
-
-    if (!userId) {
-        messageDiv.textContent = '❌ Введите ID пользователя!';
-        messageDiv.className = 'message error';
-        return;
-    }
-
-    if (!reason) {
-        messageDiv.textContent = '❌ Введите причину блокировки!';
-        messageDiv.className = 'message error';
-        return;
-    }
-
-    try {
-        const response = await fetch(API_URL + 'blacklist.json', {
-            method: 'GET',
-            headers: { 'Accept': 'application/vnd.github.v3+json' }
-        });
-
-        let sha = null;
-        let content = {};
-
-        if (response.status === 200) {
-            const data = await response.json();
-            sha = data.sha;
-            content = JSON.parse(atob(data.content));
-        }
-
-        content[userId] = {
-            reason: reason,
-            added_by: 'Админ (сайт)',
-            added_at: new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })
-        };
-
-        const encoded = btoa(JSON.stringify(content, null, 2));
-
-        const updateResponse = await fetch(API_URL + 'blacklist.json', {
-            method: 'PUT',
-            headers: {
-                'Authorization': 'token ghp_...', // Тут нужен токен
-                'Accept': 'application/vnd.github.v3+json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                message: `⛔ Добавлен в черный список: ${userId}`,
-                content: encoded,
-                sha: sha,
-                branch: 'main'
-            })
-        });
-
-        if (updateResponse.status === 200 || updateResponse.status === 201) {
-            messageDiv.textContent = `✅ Пользователь ${userId} добавлен в черный список!`;
-            messageDiv.className = 'message success';
-            document.getElementById('blockUserId').value = '';
-            document.getElementById('blockReason').value = '';
-            await loadBlacklist();
-        } else {
-            const error = await updateResponse.json();
-            messageDiv.textContent = `❌ Ошибка: ${error.message || 'Неизвестная ошибка'}`;
-            messageDiv.className = 'message error';
-        }
-    } catch (error) {
-        messageDiv.textContent = `❌ Ошибка: ${error.message}`;
-        messageDiv.className = 'message error';
-    }
-});
-
-document.getElementById('unblockBtn').addEventListener('click', async function() {
-    const userId = document.getElementById('unblockUserId').value.trim();
-    const messageDiv = document.getElementById('unblockMessage');
-
-    if (!userId) {
-        messageDiv.textContent = '❌ Введите ID пользователя!';
-        messageDiv.className = 'message error';
-        return;
-    }
-
-    try {
-        const response = await fetch(API_URL + 'blacklist.json', {
-            method: 'GET',
-            headers: { 'Accept': 'application/vnd.github.v3+json' }
-        });
-
-        let sha = null;
-        let content = {};
-
-        if (response.status === 200) {
-            const data = await response.json();
-            sha = data.sha;
-            content = JSON.parse(atob(data.content));
-        }
-
-        if (!content[userId]) {
-            messageDiv.textContent = `❌ Пользователь ${userId} не найден в черном списке!`;
-            messageDiv.className = 'message error';
-            return;
-        }
-
-        delete content[userId];
-        const encoded = btoa(JSON.stringify(content, null, 2));
-
-        const updateResponse = await fetch(API_URL + 'blacklist.json', {
-            method: 'PUT',
-            headers: {
-                'Authorization': 'token ghp_...', // Тут нужен токен
-                'Accept': 'application/vnd.github.v3+json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                message: `✅ Удален из черного списка: ${userId}`,
-                content: encoded,
-                sha: sha,
-                branch: 'main'
-            })
-        });
-
-        if (updateResponse.status === 200 || updateResponse.status === 201) {
-            messageDiv.textContent = `✅ Пользователь ${userId} удален из черного списка!`;
-            messageDiv.className = 'message success';
-            document.getElementById('unblockUserId').value = '';
-            await loadBlacklist();
-        } else {
-            const error = await updateResponse.json();
-            messageDiv.textContent = `❌ Ошибка: ${error.message || 'Неизвестная ошибка'}`;
-            messageDiv.className = 'message error';
-        }
-    } catch (error) {
-        messageDiv.textContent = `❌ Ошибка: ${error.message}`;
-        messageDiv.className = 'message error';
-    }
-});
+// ========== ЧЕРНЫЙ СПИСОК (БЕЗ API!) ==========
+// Просто показываем данные из blacklist.json, без возможности редактирования через сайт
+// Для управления черным списком используй бота или редактируй файл вручную
 
 console.log('🚀 ADMIN PANEL LOADED');
+console.log('📌 Данные загружаются через RAW (без API)');
