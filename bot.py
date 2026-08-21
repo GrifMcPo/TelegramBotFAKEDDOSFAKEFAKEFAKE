@@ -101,7 +101,7 @@ def save_log_local(log_entry):
 def save_log(log_entry):
     save_log_local(log_entry)
 
-# ========== УДАЛЕНИЕ ЧЕРЕЗ BUSINESS API ==========
+# ========== УДАЛЕНИЕ ==========
 async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
     try:
         url = f'https://api.telegram.org/bot{BOT_TOKEN}/deleteBusinessMessages'
@@ -132,30 +132,46 @@ async def send_to_business_chat(chat_id: int, text: str, connection_id: str, rep
         logger.error(f"❌ Ошибка отправки: {e}")
         return None
 
-# ========== БЕЗОПАСНОЕ РЕДАКТИРОВАНИЕ ==========
-async def safe_edit(chat_id: int, message_id: int, text: str, connection_id: str = None):
-    """Безопасно редактирует сообщение через bot.edit_message_text"""
+# ========== РЕДАКТИРОВАНИЕ В БИЗНЕС-ЧАТЕ ==========
+async def edit_business_message(chat_id: int, message_id: int, text: str, connection_id: str):
+    """Редактирует сообщение в бизнес-чате через прямой API-запрос"""
     try:
-        if connection_id:
-            return await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=text,
-                business_connection_id=connection_id
-            )
+        url = f'https://api.telegram.org/bot{BOT_TOKEN}/editMessageText'
+        payload = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+            "business_connection_id": connection_id
+        }
+        response = requests.post(url, json=payload, timeout=10)
+        result = response.json()
+        if result.get('ok'):
+            logger.info(f"✅ Сообщение {message_id} отредактировано")
+            return True
         else:
-            return await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=text
-            )
+            logger.warning(f"⚠️ Ошибка редактирования: {result.get('description')}")
+            return False
     except Exception as e:
         logger.warning(f"⚠️ Не удалось отредактировать: {e}")
-        return None
+        return False
 
-# ========== АНИМАЦИЯ (ПРАВИЛЬНАЯ) ==========
+# ========== РЕДАКТИРОВАНИЕ В ОБЫЧНОМ ЧАТЕ ==========
+async def edit_normal_message(chat_id: int, message_id: int, text: str):
+    """Редактирует сообщение в обычном чате через bot.edit_message_text"""
+    try:
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text
+        )
+        return True
+    except Exception as e:
+        logger.warning(f"⚠️ Не удалось отредактировать: {e}")
+        return False
+
+# ========== АНИМАЦИЯ ==========
 async def show_animation(target, connection_id=None):
-    """Показывает анимацию подключения с редактированием"""
+    """Показывает анимацию подключения"""
     
     # Отправляем первое сообщение
     if connection_id:
@@ -184,44 +200,73 @@ async def show_animation(target, connection_id=None):
     await asyncio.sleep(0.5)
     
     # Редактируем — шаг 2
-    await safe_edit(
-        target,
-        msg.message_id,
-        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-        "📡 Сервер #1... ████████░░ 80%\n"
-        "📡 Сервер #2... ██████░░░░ 60%\n"
-        "📡 Сервер #3... ████░░░░░░ 40%\n"
-        "📡 Сервер #4... ██░░░░░░░░ 20%\n"
-        "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
-        "⏳ Ожидайте...",
-        connection_id
-    )
+    if connection_id:
+        await edit_business_message(
+            target,
+            msg.message_id,
+            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+            "📡 Сервер #1... ████████░░ 80%\n"
+            "📡 Сервер #2... ██████░░░░ 60%\n"
+            "📡 Сервер #3... ████░░░░░░ 40%\n"
+            "📡 Сервер #4... ██░░░░░░░░ 20%\n"
+            "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
+            "⏳ Ожидайте...",
+            connection_id
+        )
+    else:
+        await edit_normal_message(target, msg.message_id,
+            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+            "📡 Сервер #1... ████████░░ 80%\n"
+            "📡 Сервер #2... ██████░░░░ 60%\n"
+            "📡 Сервер #3... ████░░░░░░ 40%\n"
+            "📡 Сервер #4... ██░░░░░░░░ 20%\n"
+            "📡 Сервер #5... ░░░░░░░░░░ 0%\n\n"
+            "⏳ Ожидайте..."
+        )
     await asyncio.sleep(0.5)
     
     # Редактируем — шаг 3
-    await safe_edit(
-        target,
-        msg.message_id,
-        "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
-        "📡 Сервер #1... ██████████ 100% ✅\n"
-        "📡 Сервер #2... ██████████ 100% ✅\n"
-        "📡 Сервер #3... ████████░░ 80%\n"
-        "📡 Сервер #4... ██████░░░░ 60%\n"
-        "📡 Сервер #5... ████░░░░░░ 40%\n\n"
-        "⏳ Ожидайте...",
-        connection_id
-    )
+    if connection_id:
+        await edit_business_message(
+            target,
+            msg.message_id,
+            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+            "📡 Сервер #1... ██████████ 100% ✅\n"
+            "📡 Сервер #2... ██████████ 100% ✅\n"
+            "📡 Сервер #3... ████████░░ 80%\n"
+            "📡 Сервер #4... ██████░░░░ 60%\n"
+            "📡 Сервер #5... ████░░░░░░ 40%\n\n"
+            "⏳ Ожидайте...",
+            connection_id
+        )
+    else:
+        await edit_normal_message(target, msg.message_id,
+            "🔄 ПОДКЛЮЧЕНИЕ К СЕРВЕРАМ\n\n"
+            "📡 Сервер #1... ██████████ 100% ✅\n"
+            "📡 Сервер #2... ██████████ 100% ✅\n"
+            "📡 Сервер #3... ████████░░ 80%\n"
+            "📡 Сервер #4... ██████░░░░ 60%\n"
+            "📡 Сервер #5... ████░░░░░░ 40%\n\n"
+            "⏳ Ожидайте..."
+        )
     await asyncio.sleep(0.5)
     
     # Редактируем — финал
-    await safe_edit(
-        target,
-        msg.message_id,
-        "✅ ПОДКЛЮЧЕНИЕ ВЫПОЛНЕНО\n\n"
-        "📊 Получение данных...\n"
-        "⏳ Обработка информации...",
-        connection_id
-    )
+    if connection_id:
+        await edit_business_message(
+            target,
+            msg.message_id,
+            "✅ ПОДКЛЮЧЕНИЕ ВЫПОЛНЕНО\n\n"
+            "📊 Получение данных...\n"
+            "⏳ Обработка информации...",
+            connection_id
+        )
+    else:
+        await edit_normal_message(target, msg.message_id,
+            "✅ ПОДКЛЮЧЕНИЕ ВЫПОЛНЕНО\n\n"
+            "📊 Получение данных...\n"
+            "⏳ Обработка информации..."
+        )
     await asyncio.sleep(0.5)
     
     return msg
@@ -506,15 +551,13 @@ async def probe_ip_business(chat_id, ip, connection_id, user_id, message):
         "time": get_msk_time()
     })
     
-    # АНИМАЦИЯ
     loading = await show_animation(chat_id, connection_id)
     
-    # ПРОБИВ
     results, success_count = await probe_ip(ip)
     final = analyze_ip_results(results)
     
-    # ФИНАЛЬНЫЙ ОТВЕТ (РЕДАКТИРУЕМ ПОСЛЕДНЕЕ СООБЩЕНИЕ)
-    await safe_edit(
+    # ФИНАЛ
+    await edit_business_message(
         chat_id,
         loading.message_id,
         f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
@@ -548,12 +591,12 @@ async def probe_phone_business(chat_id, phone, connection_id, user_id, message):
     results, success_count, local_data = await probe_phone(phone)
     
     if local_data and "error" in local_data:
-        await safe_edit(chat_id, loading.message_id, f"❌ {local_data['error']}", connection_id)
+        await edit_business_message(chat_id, loading.message_id, f"❌ {local_data['error']}", connection_id)
         return
     
     final = analyze_phone_results(results, local_data)
     
-    await safe_edit(
+    await edit_business_message(
         chat_id,
         loading.message_id,
         f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
@@ -705,7 +748,7 @@ async def probe_ip_command(message: types.Message, ip: str):
     results, success_count = await probe_ip(ip)
     final = analyze_ip_results(results)
     
-    await safe_edit(
+    await edit_normal_message(
         message.chat.id,
         loading.message_id,
         f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
@@ -737,12 +780,12 @@ async def probe_phone_command(message: types.Message, phone: str):
     results, success_count, local_data = await probe_phone(phone)
     
     if local_data and "error" in local_data:
-        await safe_edit(message.chat.id, loading.message_id, f"❌ {local_data['error']}")
+        await edit_normal_message(message.chat.id, loading.message_id, f"❌ {local_data['error']}")
         return
     
     final = analyze_phone_results(results, local_data)
     
-    await safe_edit(
+    await edit_normal_message(
         message.chat.id,
         loading.message_id,
         f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n"
