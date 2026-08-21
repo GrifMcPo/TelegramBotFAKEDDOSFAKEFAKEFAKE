@@ -309,7 +309,7 @@ async def probe_ip(ip: str):
     
     return results, success_count
 
-# ========== ПРОБИВ НОМЕРА (УЛУЧШЕННЫЙ!) ==========
+# ========== ПРОБИВ НОМЕРА ==========
 async def probe_phone(phone: str):
     results = []
     success_count = 0
@@ -544,7 +544,6 @@ async def handle_business_connection(connection: BusinessConnection):
         
         # ТОЛЬКО АДМИН МОЖЕТ ПОДКЛЮЧИТЬ БИЗНЕС-БОТА!
         if not is_admin(user_id):
-            # ПРОСТО ИГНОРИРУЕМ, НИЧЕГО НЕ ОТПРАВЛЯЕМ!
             logger.info(f"🔒 Неавторизованная попытка бизнес-подключения: {user_id}")
             return
         
@@ -569,200 +568,213 @@ async def handle_business_message(message: types.Message):
         message_id = message.message_id
         connection_id = message.business_connection_id
         
-        # ТОЛЬКО АДМИН МОЖЕТ ИСПОЛЬЗОВАТЬ БИЗНЕС-БОТА!
-        if not is_admin(user_id):
-            # УДАЛЯЕМ СООБЩЕНИЕ И ТИХО ИГНОРИРУЕМ - НИКАКИХ УВЕДОМЛЕНИЙ!
-            await delete_business_message(chat_id, message_id, connection_id)
+        # ===== ВАЖНО: ПРОВЕРЯЕМ, ЧТО БИЗНЕС-БОТ ПОДКЛЮЧЕН АДМИНОМ =====
+        # Находим ID админа, который подключил бизнес-бота
+        admin_id = None
+        for uid, conn_id in business_connections.items():
+            if conn_id == connection_id:
+                admin_id = int(uid)
+                break
+        
+        # Если бизнес-бот не подключен админом - просто игнорируем
+        if admin_id is None or not is_admin(admin_id):
+            # НЕ УДАЛЯЕМ сообщения, просто игнорируем
             return
         
-        if not connection_id:
-            connection_id = business_connections.get(str(user_id))
-        
-        if is_blacklisted(user_id):
-            if str(user_id) not in blocked_notified:
-                reason = get_blacklist_reason(user_id)
-                await delete_business_message(chat_id, message_id, connection_id)
-                await send_to_business_chat(
-                    chat_id,
-                    f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}",
-                    connection_id
-                )
-                blocked_notified[str(user_id)] = True
-            else:
-                await delete_business_message(chat_id, message_id, connection_id)
-            return
-        
-        if not message.text:
-            return
-        
-        text = message.text.strip()
-        
-        # .ban
-        if text.lower().startswith('.ban'):
-            await delete_business_message(chat_id, message_id, connection_id)
+        # ===== ТЕПЕРЬ РАБОТАЕМ С КОМАНДАМИ ОТ АДМИНА =====
+        # Если сообщение от админа - обрабатываем команды
+        if is_admin(user_id):
+            if not connection_id:
+                connection_id = business_connections.get(str(user_id))
             
-            parts = text.split(maxsplit=3)
-            if len(parts) < 3:
-                await send_to_business_chat(chat_id, "❌ .ban [ID] [время в минутах] [причина]", connection_id)
+            if is_blacklisted(user_id):
+                if str(user_id) not in blocked_notified:
+                    reason = get_blacklist_reason(user_id)
+                    await delete_business_message(chat_id, message_id, connection_id)
+                    await send_to_business_chat(
+                        chat_id,
+                        f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}",
+                        connection_id
+                    )
+                    blocked_notified[str(user_id)] = True
+                else:
+                    await delete_business_message(chat_id, message_id, connection_id)
                 return
             
-            target_id = parts[1]
-            try:
-                time_minutes = int(parts[2])
-            except:
-                time_minutes = 60
-            reason = parts[3] if len(parts) > 3 else "Без причины"
-            
-            add_to_blacklist(target_id, reason, user_id, time_minutes)
-            
-            await send_to_business_chat(
-                chat_id,
-                f"✅ {target_id} Был успешно забанен в боте!\n📌 Причина: {reason}\n⏱ Время: {time_minutes} минут",
-                connection_id
-            )
-            
-            try:
-                time_str = f"{time_minutes} минут" if time_minutes > 0 else "навсегда"
-                await bot.send_message(
-                    chat_id=target_id,
-                    text=f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}\n⏱ Время: {time_str}"
-                )
-            except:
-                pass
-            
-            logger.info(f"🔨 Бан: {target_id} от {user_id} на {time_minutes} мин")
-            return
-        
-        # .unban
-        if text.lower().startswith('.unban'):
-            await delete_business_message(chat_id, message_id, connection_id)
-            
-            parts = text.split(maxsplit=2)
-            if len(parts) < 2:
-                await send_to_business_chat(chat_id, "❌ .unban [ID] [причина]", connection_id)
+            if not message.text:
                 return
             
-            target_id = parts[1]
-            reason = parts[2] if len(parts) > 2 else "Без причины"
+            text = message.text.strip()
             
-            if remove_from_blacklist(target_id):
+            # .ban
+            if text.lower().startswith('.ban'):
+                await delete_business_message(chat_id, message_id, connection_id)
+                
+                parts = text.split(maxsplit=3)
+                if len(parts) < 3:
+                    await send_to_business_chat(chat_id, "❌ .ban [ID] [время в минутах] [причина]", connection_id)
+                    return
+                
+                target_id = parts[1]
+                try:
+                    time_minutes = int(parts[2])
+                except:
+                    time_minutes = 60
+                reason = parts[3] if len(parts) > 3 else "Без причины"
+                
+                add_to_blacklist(target_id, reason, user_id, time_minutes)
+                
                 await send_to_business_chat(
                     chat_id,
-                    f"✅ {target_id} был разбанен в боте!\n📌 Причина: {reason}",
+                    f"✅ {target_id} Был успешно забанен в боте!\n📌 Причина: {reason}\n⏱ Время: {time_minutes} минут",
                     connection_id
                 )
                 
                 try:
+                    time_str = f"{time_minutes} минут" if time_minutes > 0 else "навсегда"
                     await bot.send_message(
                         chat_id=target_id,
-                        text=f"✅ ВАС РАЗБАНИЛИ В БОТЕ!\n\n📌 Причина: {reason}"
+                        text=f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}\n⏱ Время: {time_str}"
                     )
                 except:
                     pass
-            else:
-                await send_to_business_chat(
-                    chat_id,
-                    f"❌ Пользователь {target_id} не найден в черном списке",
-                    connection_id
-                )
-            return
-        
-        # .help
-        if text.lower() == '.help':
-            await delete_business_message(chat_id, message_id, connection_id)
-            await send_to_business_chat(
-                chat_id,
-                "📚 СПИСОК КОМАНД\n\n"
-                ".help - Справка\n"
-                ".ping - Проверка\n"
-                ".time - Время\n"
-                ".info - Информация\n\n"
-                "🔍 ПРОБИВ\n"
-                ".whois ip [IP]\n"
-                ".whois number [НОМЕР]\n\n"
-                "📊 СТАТИСТИКА\n"
-                ".stats\n\n"
-                "⚡ АДМИН\n"
-                ".ban [ID] [время] [причина]\n"
-                ".unban [ID] [причина]",
-                connection_id
-            )
-            return
-        
-        # .ping
-        if text.lower() == '.ping':
-            await delete_business_message(chat_id, message_id, connection_id)
-            await send_to_business_chat(chat_id, f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}", connection_id)
-            return
-        
-        # .time
-        if text.lower() == '.time':
-            await delete_business_message(chat_id, message_id, connection_id)
-            await send_to_business_chat(chat_id, f"🕐 МСК: {get_msk_time()}", connection_id)
-            return
-        
-        # .info
-        if text.lower() == '.info':
-            await delete_business_message(chat_id, message_id, connection_id)
-            await send_to_business_chat(
-                chat_id,
-                f"👤 ИНФОРМАЦИЯ\n\n"
-                f"🆔 ID: {user_id}\n"
-                f"👤 Username: @{message.from_user.username or 'Нет'}\n"
-                f"📛 Имя: {message.from_user.full_name}\n"
-                f"🕐 Время: {get_msk_time()}",
-                connection_id
-            )
-            return
-        
-        # .stats
-        if text.lower() == '.stats':
-            await delete_business_message(chat_id, message_id, connection_id)
-            try:
-                with open(LOGS_FILE, 'r', encoding='utf-8') as f:
-                    logs = json.load(f)
-                users = set(l.get('user_id') for l in logs)
-                probes = len([l for l in logs if l.get('type') == 'probe'])
-                await send_to_business_chat(
-                    chat_id,
-                    f"📊 СТАТИСТИКА\n\n"
-                    f"👤 Пользователей: {len(users)}\n"
-                    f"📝 Команд: {len(logs)}\n"
-                    f"🔍 Пробивов: {probes}\n"
-                    f"🕐 Время: {get_msk_time()}",
-                    connection_id
-                )
-            except:
-                await send_to_business_chat(chat_id, "📊 Статистика временно недоступна", connection_id)
-            return
-        
-        # .whois
-        if text.lower().startswith('.whois'):
-            await delete_business_message(chat_id, message_id, connection_id)
+                
+                logger.info(f"🔨 Бан: {target_id} от {user_id} на {time_minutes} мин")
+                return
             
-            parts = text.split(maxsplit=2)
-            if len(parts) < 3:
+            # .unban
+            if text.lower().startswith('.unban'):
+                await delete_business_message(chat_id, message_id, connection_id)
+                
+                parts = text.split(maxsplit=2)
+                if len(parts) < 2:
+                    await send_to_business_chat(chat_id, "❌ .unban [ID] [причина]", connection_id)
+                    return
+                
+                target_id = parts[1]
+                reason = parts[2] if len(parts) > 2 else "Без причины"
+                
+                if remove_from_blacklist(target_id):
+                    await send_to_business_chat(
+                        chat_id,
+                        f"✅ {target_id} был разбанен в боте!\n📌 Причина: {reason}",
+                        connection_id
+                    )
+                    
+                    try:
+                        await bot.send_message(
+                            chat_id=target_id,
+                            text=f"✅ ВАС РАЗБАНИЛИ В БОТЕ!\n\n📌 Причина: {reason}"
+                        )
+                    except:
+                        pass
+                else:
+                    await send_to_business_chat(
+                        chat_id,
+                        f"❌ Пользователь {target_id} не найден в черном списке",
+                        connection_id
+                    )
+                return
+            
+            # .help
+            if text.lower() == '.help':
+                await delete_business_message(chat_id, message_id, connection_id)
                 await send_to_business_chat(
                     chat_id,
-                    "❌ .whois ip [IP] или .whois number [НОМЕР]",
+                    "📚 СПИСОК КОМАНД\n\n"
+                    ".help - Справка\n"
+                    ".ping - Проверка\n"
+                    ".time - Время\n"
+                    ".info - Информация\n\n"
+                    "🔍 ПРОБИВ\n"
+                    ".whois ip [IP]\n"
+                    ".whois number [НОМЕР]\n\n"
+                    "📊 СТАТИСТИКА\n"
+                    ".stats\n\n"
+                    "⚡ АДМИН\n"
+                    ".ban [ID] [время] [причина]\n"
+                    ".unban [ID] [причина]",
                     connection_id
                 )
                 return
             
-            command_type = parts[1].lower()
-            target = parts[2]
+            # .ping
+            if text.lower() == '.ping':
+                await delete_business_message(chat_id, message_id, connection_id)
+                await send_to_business_chat(chat_id, f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}", connection_id)
+                return
             
-            if command_type == "ip":
-                await probe_ip_business(chat_id, target, connection_id, user_id, message)
-            elif command_type == "number":
-                await probe_phone_business(chat_id, target, connection_id, user_id, message)
-            else:
+            # .time
+            if text.lower() == '.time':
+                await delete_business_message(chat_id, message_id, connection_id)
+                await send_to_business_chat(chat_id, f"🕐 МСК: {get_msk_time()}", connection_id)
+                return
+            
+            # .info
+            if text.lower() == '.info':
+                await delete_business_message(chat_id, message_id, connection_id)
                 await send_to_business_chat(
                     chat_id,
-                    "❌ .whois ip [IP] или .whois number [НОМЕР]",
+                    f"👤 ИНФОРМАЦИЯ\n\n"
+                    f"🆔 ID: {user_id}\n"
+                    f"👤 Username: @{message.from_user.username or 'Нет'}\n"
+                    f"📛 Имя: {message.from_user.full_name}\n"
+                    f"🕐 Время: {get_msk_time()}",
                     connection_id
                 )
-            return
+                return
+            
+            # .stats
+            if text.lower() == '.stats':
+                await delete_business_message(chat_id, message_id, connection_id)
+                try:
+                    with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+                        logs = json.load(f)
+                    users = set(l.get('user_id') for l in logs)
+                    probes = len([l for l in logs if l.get('type') == 'probe'])
+                    await send_to_business_chat(
+                        chat_id,
+                        f"📊 СТАТИСТИКА\n\n"
+                        f"👤 Пользователей: {len(users)}\n"
+                        f"📝 Команд: {len(logs)}\n"
+                        f"🔍 Пробивов: {probes}\n"
+                        f"🕐 Время: {get_msk_time()}",
+                        connection_id
+                    )
+                except:
+                    await send_to_business_chat(chat_id, "📊 Статистика временно недоступна", connection_id)
+                return
+            
+            # .whois
+            if text.lower().startswith('.whois'):
+                await delete_business_message(chat_id, message_id, connection_id)
+                
+                parts = text.split(maxsplit=2)
+                if len(parts) < 3:
+                    await send_to_business_chat(
+                        chat_id,
+                        "❌ .whois ip [IP] или .whois number [НОМЕР]",
+                        connection_id
+                    )
+                    return
+                
+                command_type = parts[1].lower()
+                target = parts[2]
+                
+                if command_type == "ip":
+                    await probe_ip_business(chat_id, target, connection_id, user_id, message)
+                elif command_type == "number":
+                    await probe_phone_business(chat_id, target, connection_id, user_id, message)
+                else:
+                    await send_to_business_chat(
+                        chat_id,
+                        "❌ .whois ip [IP] или .whois number [НОМЕР]",
+                        connection_id
+                    )
+                return
+        
+        # ===== СООБЩЕНИЯ ОТ СОБЕСЕДНИКОВ НЕ УДАЛЯЕМ! =====
+        # Просто игнорируем, ничего не делаем
         
     except Exception as e:
         logger.error(f"❌ Ошибка бизнес-сообщения: {e}")
