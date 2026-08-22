@@ -1,8 +1,8 @@
 // ==========================================
 //       СЮДА ВСТАВЬТЕ ВАШИ КЛЮЧИ SUPABASE
 // ==========================================
-const supabaseUrl = 'https://txyvftkhmdavtajcfkdx.supabase.co'; // Ваш URL проекта
-const supabaseKey = 'sb_publishable_NGvqSLKswBzGx2s5s_IGCw_zM6Ct7n3'; // Ваш Publishable Key
+const supabaseUrl = 'https://txyvftkhmdavtajcfkdx.supabase.co';
+const supabaseKey = 'sb_publishable_NGvqSLKswBzGx2s5s_IGCw_zM6Ct7n3';
 
 let requestIdCounter = 1;
 const consoleDiv = document.getElementById('console');
@@ -28,11 +28,11 @@ async function sendCommand() {
     addLog(`&gt; ${cmd}`, 'info');
     inputField.value = '';
     sendBtn.disabled = true;
-    sendBtn.textContent = 'ОТПРАВКА...';
+    sendBtn.textContent = 'ЖДЕМ...';
 
     try {
-        // 1. Отправляем команду в таблицу commands
-        await fetch(`${supabaseUrl}/rest/v1/commands`, {
+        // 1. Отправляем команду
+        const postRes = await fetch(`${supabaseUrl}/rest/v1/commands`, {
             method: 'POST',
             headers: {
                 apikey: supabaseKey,
@@ -42,45 +42,59 @@ async function sendCommand() {
             body: JSON.stringify({ command: cmd })
         });
 
-        addLog("✅ Команда отправлена ботом", 'success');
+        if (!postRes.ok) {
+            const errText = await postRes.text();
+            throw new Error(`Supabase POST error: ${errText}`);
+        }
 
-        // 2. Начинаем ждать ответ в таблице responses
+        // 2. Опрос таблицы responses
         let attempts = 0;
         const interval = setInterval(async () => {
             attempts++;
             
-            const res = await fetch(`${supabaseUrl}/rest/v1/responses?response_id=eq.${currentId}&select=result,time`, {
-                headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
-            });
-            
-            const data = await res.json();
-            
-            if (data && data.length > 0) {
-                clearInterval(interval);
-                
-                // Очищаем старые попытки этого же запроса, если они были
-                consoleDiv.querySelectorAll('.log-line').forEach(el => {
-                    if (el.innerText.includes(`ID:${currentId}`) && el.innerText.includes('[BOT]')) {
-                        el.remove();
+            try {
+                const res = await fetch(`${supabaseUrl}/rest/v1/responses?response_id=eq.${currentId}&select=result,time`, {
+                    headers: { 
+                        apikey: supabaseKey, 
+                        Authorization: `Bearer ${supabaseKey}` 
                     }
                 });
 
-                addLog(`[BOT] ${data[0].result.replace(/\n/g, '<br>')}`, 'success');
-                sendBtn.disabled = false;
-                sendBtn.textContent = 'EXECUTE';
-            } 
-            
-            // Таймаут ожидания
-            if (attempts > 30) { 
-                clearInterval(interval);
-                addLog('⏰ Время ожидания истекло.', 'error');
-                sendBtn.disabled = false;
-                sendBtn.textContent = 'EXECUTE';
+                if (!res.ok) throw new Error("Failed to fetch response");
+                
+                const data = await res.json();
+
+                // Проверяем, пришел ли именно наш ответ
+                if (data && Array.isArray(data) && data.length > 0) {
+                    clearInterval(interval);
+                    
+                    // Удаляем заглушку "ЖДЕМ", чтобы не мусорить в логах
+                    const lines = consoleDiv.querySelectorAll('.log-line');
+                    const lastLine = lines[lines.length - 1];
+                    if (lastLine && lastLine.innerText.includes(currentId) && lastLine.innerText.includes('ЖДЕМ')) {
+                        lastLine.remove();
+                    }
+
+                    // Выводим красивый ответ от бота
+                    const resultText = data[0].result || "[Пустой ответ]";
+                    addLog(resultText.replace(/\n/g, '<br>'), 'success');
+                
+                } else if (attempts > 45) { // Таймаут ~45 секунд
+                    clearInterval(interval);
+                    addLog('⏰ Время ожидания истекло. Попробуйте снова.', 'error');
+                }
+
+            } catch (pollErr) {
+                // Игнорируем мелкие сетевые сбои во время опроса
+                if (attempts > 45) {
+                    clearInterval(interval);
+                    addLog('❌ Ошибка связи при ожидании ответа.', 'error');
+                }
             }
-        }, 1000); // Проверяем раз в секунду
+        }, 1000); // Раз в секунду
         
     } catch (err) {
-        addLog(`❌ Сетевая ошибка: ${err.message}`, 'error');
+        addLog(`❌ Критическая ошибка: ${err.message}`, 'error');
         sendBtn.disabled = false;
         sendBtn.textContent = 'EXECUTE';
     }
