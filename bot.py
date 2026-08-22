@@ -426,19 +426,25 @@ def get_main_keyboard():
 # ========== BUSINESS CONNECTION ==========
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
+    logger.info(f"🔔 ПОЛУЧЕНО БИЗНЕС-ПОДКЛЮЧЕНИЕ: {connection}")
+    
     if connection.user:
         user_id = connection.user.id
         connection_id = connection.id
         username = connection.user.username or "Нет юзернейма"
         
-        # ТОЛЬКО АДМИН МОЖЕТ ПОДКЛЮЧИТЬ - НЕПРАВИЛЬНЫМ НЕ ОТВЕЧАЕМ!
+        logger.info(f"👤 USER: {user_id}, USERNAME: @{username}, CONNECTION_ID: {connection_id}")
+        
+        # ТОЛЬКО АДМИН МОЖЕТ ПОДКЛЮЧИТЬ
         if not is_admin(user_id):
-            logger.info(f"🔒 Неавторизованная попытка подключения: {user_id}")
-            return  # ПРОСТО ИГНОР, НИКАКИХ СООБЩЕНИЙ!
+            logger.info(f"🔒 НЕ АДМИН пытался подключиться: {user_id}")
+            return
         
+        # СОХРАНЯЕМ connection_id
         business_connections[str(user_id)] = connection_id
+        logger.info(f"✅ СОХРАНЕНО В business_connections: {business_connections}")
         
-        logger.info(f"🔗 BUSINESS CONNECTION: @{username} (ID: {user_id})")
+        logger.info(f"🔗 BUSINESS CONNECTION УСПЕШНО: @{username} (ID: {user_id})")
         
         await bot.send_message(
             chat_id=user_id,
@@ -457,24 +463,35 @@ async def handle_business_message(message: types.Message):
         message_id = message.message_id
         connection_id = message.business_connection_id
         
-        # ===== ВАЖНО: ПРОВЕРЯЕМ, ЧТО БИЗНЕС-БОТ ПОДКЛЮЧЕН АДМИНОМ =====
+        logger.info(f"📩 ПОЛУЧЕНО СООБЩЕНИЕ В БИЗНЕС-ЧАТЕ от {user_id}: {message.text}")
+        logger.info(f"🔗 connection_id: {connection_id}")
+        logger.info(f"📋 business_connections: {business_connections}")
+        
+        # ===== ПРОВЕРЯЕМ, ЧТО БИЗНЕС-БОТ ПОДКЛЮЧЕН АДМИНОМ =====
         admin_id = None
         for uid, conn_id in business_connections.items():
             if conn_id == connection_id:
                 admin_id = int(uid)
                 break
         
-        # Если бизнес-бот не подключен админом - ПРОСТО ИГНОРИРУЕМ (НЕ УДАЛЯЕМ!)
+        logger.info(f"🔍 НАЙДЕН АДМИН ДЛЯ ЭТОГО connection_id: {admin_id}")
+        
+        # Если бизнес-бот не подключен админом - ИГНОР
         if admin_id is None or not is_admin(admin_id):
-            return  # ВОТ ТУТ ГЛАВНОЕ - НЕ УДАЛЯЕМ СООБЩЕНИЯ!
+            logger.info(f"⏭️ ИГНОР: бизнес-бот не подключен админом")
+            return
         
         # ===== ЕСЛИ ПИШЕТ НЕ АДМИН - ПРОСТО ИГНОР =====
         if not is_admin(user_id):
-            return  # НИЧЕГО НЕ ДЕЛАЕМ, НЕ УДАЛЯЕМ!
+            logger.info(f"⏭️ ИГНОР: сообщение от не-админа {user_id}")
+            return
+        
+        logger.info(f"✅ АДМИН {user_id} ОТПРАВИЛ КОМАНДУ: {message.text}")
         
         # ===== ТЕПЕРЬ ОБРАБАТЫВАЕМ КОМАНДЫ ОТ АДМИНА =====
         if not connection_id:
             connection_id = business_connections.get(str(user_id))
+            logger.info(f"🔗 connection_id взят из business_connections: {connection_id}")
         
         if is_blacklisted(user_id):
             if str(user_id) not in blocked_notified:
@@ -498,6 +515,7 @@ async def handle_business_message(message: types.Message):
         # ===== ВСЕ КОМАНДЫ =====
         # .ban
         if text.lower().startswith('.ban'):
+            logger.info(f"🔨 ОБРАБОТКА .ban")
             await delete_business_message(chat_id, message_id, connection_id)
             
             parts = text.split(maxsplit=3)
@@ -534,6 +552,7 @@ async def handle_business_message(message: types.Message):
         
         # .unban
         if text.lower().startswith('.unban'):
+            logger.info(f"🔓 ОБРАБОТКА .unban")
             await delete_business_message(chat_id, message_id, connection_id)
             
             parts = text.split(maxsplit=2)
@@ -568,6 +587,7 @@ async def handle_business_message(message: types.Message):
         
         # .help
         if text.lower() == '.help':
+            logger.info(f"📚 ОБРАБОТКА .help")
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(
                 chat_id,
@@ -590,18 +610,21 @@ async def handle_business_message(message: types.Message):
         
         # .ping
         if text.lower() == '.ping':
+            logger.info(f"🏓 ОБРАБОТКА .ping")
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(chat_id, f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}", connection_id)
             return
         
         # .time
         if text.lower() == '.time':
+            logger.info(f"🕐 ОБРАБОТКА .time")
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(chat_id, f"🕐 МСК: {get_msk_time()}", connection_id)
             return
         
         # .info
         if text.lower() == '.info':
+            logger.info(f"👤 ОБРАБОТКА .info")
             await delete_business_message(chat_id, message_id, connection_id)
             await send_to_business_chat(
                 chat_id,
@@ -616,6 +639,7 @@ async def handle_business_message(message: types.Message):
         
         # .stats
         if text.lower() == '.stats':
+            logger.info(f"📊 ОБРАБОТКА .stats")
             await delete_business_message(chat_id, message_id, connection_id)
             try:
                 with open(LOGS_FILE, 'r', encoding='utf-8') as f:
@@ -637,6 +661,7 @@ async def handle_business_message(message: types.Message):
         
         # .whois
         if text.lower().startswith('.whois'):
+            logger.info(f"🔍 ОБРАБОТКА .whois")
             await delete_business_message(chat_id, message_id, connection_id)
             
             parts = text.split(maxsplit=2)
@@ -663,8 +688,12 @@ async def handle_business_message(message: types.Message):
                 )
             return
         
+        logger.info(f"⏭️ НЕИЗВЕСТНАЯ КОМАНДА: {text}")
+        
     except Exception as e:
         logger.error(f"❌ Ошибка бизнес-сообщения: {e}")
+        import traceback
+        traceback.print_exc()
 
 # ========== ПРОБИВ В БИЗНЕС-ЧАТЕ ==========
 async def probe_ip_business(chat_id, ip, connection_id, user_id, message):
