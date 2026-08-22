@@ -46,6 +46,7 @@ header h1 {
     padding: 6px 14px;
     border-radius: 20px;
     border: 1px solid rgba(0, 255, 136, 0.2);
+    transition: all 0.3s;
 }
 
 .quick-commands {
@@ -127,10 +128,12 @@ header h1 {
 
 .log-entry .time {
     color: #556677;
+    font-weight: bold;
 }
 
 .log-entry .command {
     color: #ffcc44;
+    font-weight: bold;
 }
 
 .log-entry .result {
@@ -139,10 +142,12 @@ header h1 {
 
 .log-entry .error {
     color: #ff4444;
+    font-weight: bold;
 }
 
 .log-entry .success {
     color: #00ff88;
+    font-weight: bold;
 }
 
 .log-entry .warning {
