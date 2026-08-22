@@ -1,5 +1,5 @@
-// ===== ВЕРСИЯ 7.0 - SUPABASE РАБОТАЕТ! =====
-console.log('🚀 RCON Client v7.0');
+// ===== ВЕРСИЯ 8.0 - MINIMAL =====
+console.log('🚀 RCON Client v8.0');
 
 // ===== КОНФИГ SUPABASE =====
 const SUPABASE_URL = 'https://txyvftkhmdavtajcfkdx.supabase.co';
@@ -24,23 +24,15 @@ async function supabaseRequest(endpoint, method = 'GET', body = null) {
         'Prefer': 'return=representation'
     };
     
-    const options = {
-        method: method,
-        headers: headers
-    };
-    
-    if (body) {
-        options.body = JSON.stringify(body);
-    }
+    const options = { method, headers };
+    if (body) options.body = JSON.stringify(body);
     
     try {
         const res = await fetch(url, options);
-        if (!res.ok) {
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return await res.json();
     } catch (err) {
-        throw new Error(`Ошибка запроса к Supabase: ${err.message}`);
+        throw new Error(`Ошибка: ${err.message}`);
     }
 }
 
@@ -52,10 +44,9 @@ async function sendCommand(command) {
     addLog('⏳ Отправка...', 'warning');
     
     try {
-        // 1. Создаем запись в Supabase
-        const result = await supabaseRequest('rcon_commands', 'POST', {
-            command: command,
-            status: 'waiting'
+        // 1. Пишем команду в таблицу commands
+        const result = await supabaseRequest('commands', 'POST', {
+            command: command
         });
         
         if (result && result.length > 0) {
@@ -70,8 +61,9 @@ async function sendCommand(command) {
                 await new Promise(r => setTimeout(r, 2000));
                 
                 try {
-                    const data = await supabaseRequest(`rcon_commands?id=eq.${commandId}&select=*`);
-                    if (data && data.length > 0 && data[0].status === 'done') {
+                    // Ищем response с response_id = commandId
+                    const data = await supabaseRequest(`responses?response_id=eq.${commandId}&select=*`);
+                    if (data && data.length > 0) {
                         response = data[0];
                         break;
                     }
@@ -107,7 +99,7 @@ async function sendCommand(command) {
                 break;
             }
         }
-        addLog(`❌ Ошибка: ${err.message}`, 'error');
+        addLog(`❌ ${err.message}`, 'error');
     }
 }
 
@@ -122,8 +114,7 @@ function sendCommandFromInput() {
 
 // ===== ИНИЦИАЛИЗАЦИЯ =====
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 RCON v7.0 готов');
-    console.log(`🔗 Supabase: ${SUPABASE_URL}`);
+    console.log('🚀 RCON v8.0 готов');
     
     document.getElementById('commandInput').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
