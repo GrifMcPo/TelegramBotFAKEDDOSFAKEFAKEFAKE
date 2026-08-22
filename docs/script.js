@@ -1,6 +1,6 @@
 // ===== КОНФИГ =====
-// ВНИМАНИЕ! Используем HTTP вместо HTTPS из-за проблем с сертификатами
-const GITHUB_RAW = 'http://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main';
+// Используем HTTPS, но с правильным URL
+const GITHUB_RAW = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main';
 
 // ===== ПЕРЕМЕННЫЕ =====
 let commandId = 0;
@@ -20,7 +20,10 @@ function addLog(text, type = 'result') {
 // ===== ПРОВЕРКА ДОСТУПНОСТИ БОТА =====
 async function checkBotStatus() {
     try {
-        const res = await fetch(`${GITHUB_RAW}/logs.json`, { cache: 'no-cache' });
+        const res = await fetch(`${GITHUB_RAW}/logs.json`, { 
+            cache: 'no-cache',
+            mode: 'cors'
+        });
         if (res.ok) {
             const data = await res.json();
             if (data && data.length > 0) {
@@ -47,7 +50,10 @@ async function checkBotStatus() {
 
 // ===== ОБНОВЛЕНИЕ СТАТУСА =====
 function updateStatus() {
-    fetch(`${GITHUB_RAW}/logs.json`, { cache: 'no-cache' })
+    fetch(`${GITHUB_RAW}/logs.json`, { 
+        cache: 'no-cache',
+        mode: 'cors'
+    })
         .then(res => {
             if (!res.ok) throw new Error('No logs');
             return res.json();
@@ -82,7 +88,10 @@ function loadBlacklist() {
     document.querySelector('[data-page="blacklist"]')?.classList.add('active');
     document.getElementById('pageTitle').textContent = '⛔ Черный список';
     
-    fetch(`${GITHUB_RAW}/blacklist.json`, { cache: 'no-cache' })
+    fetch(`${GITHUB_RAW}/blacklist.json`, { 
+        cache: 'no-cache',
+        mode: 'cors'
+    })
         .then(res => {
             if (!res.ok) throw new Error('Blacklist unavailable');
             return res.json();
@@ -120,7 +129,10 @@ function searchLogs() {
     
     document.getElementById('logsResult').innerHTML = '⏳ Загрузка...';
     
-    fetch(`${GITHUB_RAW}/logs.json`, { cache: 'no-cache' })
+    fetch(`${GITHUB_RAW}/logs.json`, { 
+        cache: 'no-cache',
+        mode: 'cors'
+    })
         .then(res => {
             if (!res.ok) throw new Error('Logs unavailable');
             return res.json();
@@ -168,7 +180,10 @@ function loadUsers() {
     document.querySelector('[data-page="users"]')?.classList.add('active');
     document.getElementById('pageTitle').textContent = '👥 Пользователи';
     
-    fetch(`${GITHUB_RAW}/logs.json`, { cache: 'no-cache' })
+    fetch(`${GITHUB_RAW}/logs.json`, { 
+        cache: 'no-cache',
+        mode: 'cors'
+    })
         .then(res => {
             if (!res.ok) throw new Error('No logs');
             return res.json();
@@ -207,7 +222,10 @@ function loadStats() {
     document.querySelector('[data-page="stats"]')?.classList.add('active');
     document.getElementById('pageTitle').textContent = '📊 Статистика';
     
-    fetch(`${GITHUB_RAW}/logs.json`, { cache: 'no-cache' })
+    fetch(`${GITHUB_RAW}/logs.json`, { 
+        cache: 'no-cache',
+        mode: 'cors'
+    })
         .then(res => {
             if (!res.ok) throw new Error('No logs');
             return res.json();
