@@ -3,71 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RCON</title>
+    <title>Панель управления ботом</title>
+    <!-- Подключаем библиотеку Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:'Courier New',monospace;background:#0a0e17;color:#e0e8f0;height:100vh;display:flex;justify-content:center;align-items:center}
-        .container{width:100%;max-width:800px;height:90vh;display:flex;flex-direction:column;padding:20px}
-        header{display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid #1a2a3e;margin-bottom:16px}
-        header h1{font-size:28px;color:#00ff88}
-        .status{color:#00ff88;font-size:14px}
-        .quick-commands{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
-        .quick-commands button{padding:6px 14px;background:#1a2a3e;color:#8899aa;border:1px solid #1a2a3e;border-radius:8px;cursor:pointer;font-size:12px;font-family:'Courier New',monospace}
-        .quick-commands button:hover{background:#2a3a4e;border-color:#00ff88;color:#fff}
-        .console{flex:1;background:#0d1520;border-radius:12px;border:1px solid #1a2a3e;display:flex;flex-direction:column;overflow:hidden}
-        .console-output{flex:1;padding:20px;overflow-y:auto;font-size:13px;line-height:1.8;background:#0a0e17;min-height:250px;max-height:500px}
-        .console-output::-webkit-scrollbar{width:6px}
-        .console-output::-webkit-scrollbar-track{background:#0a0e17}
-        .console-output::-webkit-scrollbar-thumb{background:#2a3a4e;border-radius:3px}
-        .log-entry{padding:2px 0;border-bottom:1px solid #0d1520}
-        .log-entry .time{color:#556677}
-        .log-entry .command{color:#ffcc44}
-        .log-entry .result{color:#88ddff}
-        .log-entry .error{color:#ff4444}
-        .log-entry .success{color:#00ff88}
-        .log-entry .warning{color:#ffaa44}
-        .console-input{display:flex;padding:12px 16px;border-top:1px solid #1a2a3e;gap:12px}
-        .console-input input{flex:1;padding:12px 16px;background:#0a0e17;border:1px solid #1a2a3e;border-radius:8px;color:#e0e8f0;font-family:'Courier New',monospace;font-size:14px;outline:none}
-        .console-input input:focus{border-color:#00ff88}
-        .console-input button{padding:12px 24px;background:#00ff88;color:#0a0e17;border:none;border-radius:8px;font-weight:bold;cursor:pointer;font-size:14px}
-        .console-input button:hover{background:#00cc77;transform:scale(1.02)}
-        .tip{margin-top:12px;padding:12px;background:#0d1520;border-radius:8px;border:1px solid #1a2a3e;color:#8899aa;font-size:13px;text-align:center}
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f6fa; padding: 2rem; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        input[type="text"] { width: 100%; padding: 14px; border: 2px solid #e1e5eb; border-radius: 8px; font-size: 16px; box-sizing: border-box; margin-bottom: 10px; }
+        button { width: 100%; padding: 14px; background: #000; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: opacity 0.2s; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .result { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #0d6efd; white-space: pre-wrap; font-size: 14px; }
+        small { color: #6c757d; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🚀 RCON</h1>
-            <span class="status">🟢 Бот активен</span>
-        </header>
 
-        <div class="quick-commands">
-            <button onclick="sendCommand('/help')">/help</button>
-            <button onclick="sendCommand('/stats')">/stats</button>
-            <button onclick="sendCommand('/idlist')">/idlist</button>
-            <button onclick="sendCommand('/ping')">/ping</button>
-            <button onclick="sendCommand('/time')">/time</button>
-        </div>
+<div class="container">
+    <h1>🤖 Панель управления ботом</h1>
+    
+    <!-- 
+      ВАЖНО: Замените эти ID на реальные данные из getUpdates или команды /myid в вашем боте.
+      Если оставить null, Telegram вернет ошибку.
+    -->
+    <small>ID чата назначения: <span id="chat-id-display">null (укажите в коде)</span></small>
+    
+    <input type="text" id="command-input" placeholder="/stats или любая команда...">
+    <button id="send-btn">Выполнить команду</button>
+    
+    <div id="response-area" style="display: none;" class="result"></div>
+</div>
 
-        <div class="console">
-            <div class="console-output" id="consoleOutput">
-                <div class="log-entry">
-                    <span class="success">✅ RCON подключен</span><br>
-                    <span class="result">Введите команду или нажмите на кнопку</span>
-                </div>
-            </div>
-            <div class="console-input">
-                <input type="text" id="commandInput" placeholder="Введите команду..." onkeydown="if(event.key==='Enter') sendCommandFromInput()">
-                <button onclick="sendCommandFromInput()">▶ Отправить</button>
-            </div>
-        </div>
+<script>
+// =============== НАСТРОЙКИ ===============
+const TARGET_CHAT_ID = -1001234567890; // <-- СЮДА ВПИШИТЕ РЕАЛЬНЫЙ CHAT_ID
+const SUPABASE_URL = 'https://txyvftkhmdavtajcfkdx.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_NGvqSLKswBzGx2s5s_IGCw_zM6Ct7n3';
 
-        <div class="tip">💡 Команда → Supabase → бот → ответ на сайт</div>
-    </div>
+document.getElementById('chat-id-display').innerText = TARGET_CHAT_ID;
 
-    <script>
-        const scriptVersion = Date.now();
-        document.write('<script src="script.js?v=' + scriptVersion + '"><\/script>');
-    </script>
-</body>
-</html>
+// Создаем клиента Supabase
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const commandInput = document.getElementById('command-input');
+const sendBtn = document.getElementById('send-btn');
+const responseArea = document.getElementById('response-area');
+
+async function sendCommand() {
+    const text = commandInput.value.trim();
+    if (!text) return alert('Введите команду');
+    if (TARGET_CHAT_ID === -1001234567890) return alert('Укажите реальный TARGET_CHAT_ID в коде страницы!');
+
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Отправка...';
+    responseArea.style.display = 'none';
+
+    try {
+        // 1. Пишем команду в таблицу commands
+        const { error: cmdError } = await supabase.from('commands').insert({
+            command: text,
+            // Поле chat_id можно добавить в таблицу, если нужно хранить историю по чатам
+        });
+
+        if (cmdError) throw new Error(cmdError.message || 'Ошибка записи команды');
+
+        // 2. Ожидаем появления ответа (поллинг)
+        let attempts = 0;
+        let interval = setInterval(async () => {
+            attempts++;
+            
+            // Ищем нашу свежую запись (можно искать по тексту команды для простоты)
+            const { data:
