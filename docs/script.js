@@ -1,19 +1,18 @@
-// ===== ВЕРСИЯ 6.0 =====
-console.log('🚀 RCON Client v6.0');
-
 // ===== КОНФИГ =====
-const API_URL = 'https://api.github.com/repos/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/contents/data';
 const GITHUB_RAW = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/data';
+const GITHUB_API = 'https://api.github.com/repos/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/contents/data';
 const CACHE_BUSTER = Date.now();
 
-// ===== ФУНКЦИЯ ЗАПРОСА =====
-function fetchNoCache(url, options = {}) {
+// ===== ПЕРЕМЕННЫЕ =====
+let commandId = 0;
+let isWaitingResponse = false;
+
+// ===== ФУНКЦИЯ ЗАПРОСА БЕЗ КЭША =====
+function fetchNoCache(url) {
     const separator = url.includes('?') ? '&' : '?';
     return fetch(`${url}${separator}_=${CACHE_BUSTER}`, {
-        ...options,
         cache: 'no-cache',
         headers: {
-            ...options.headers,
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
             'Expires': '0'
@@ -60,21 +59,122 @@ async function checkBotStatus() {
     }
 }
 
-// ===== ОТПРАВКА КОМАНДЫ =====
+// ===== ОТПРАВКА КОМАНДЫ И ПОЛУЧЕНИЕ ОТВЕТА =====
 async function sendCommand(command) {
-    if (!command) return;
+    if (!command || isWaitingResponse) return;
+    
+    commandId++;
+    const currentId = commandId;
+    isWaitingResponse = true;
     
     addLog(`$ ${command}`, 'command');
-    addLog('📱 ОТПРАВЬ КОМАНДУ В TELEGRAM:', 'warning');
-    addLog(`📝 Напиши боту @gredyr_bot: ${command}`, 'result');
-    addLog('💡 Или в бизнес-чате с .help', 'info');
-    addLog('⏳ Ответ придет в Telegram', 'warning');
+    addLog('⏳ Отправка команды...', 'warning');
     
-    navigator.clipboard?.writeText(command).then(() => {
-        addLog('📋 Команда скопирована! Вставь в Telegram', 'success');
-    }).catch(() => {});
+    try {
+        // 1. Пишем команду в commands.json
+        const commandData = {
+            id: currentId,
+            command: command,
+            time: new Date().toISOString()
+        };
+        
+        // Получаем текущий файл (нужно для SHA)
+        const fileRes = await fetch(`${GITHUB_API}/commands.json`, {
+            headers: { 'Accept': 'application/vnd.github.v3+json' }
+        });
+        
+        let sha = null;
+        if (fileRes.ok) {
+            const fileData = await fileRes.json();
+            sha = fileData.sha;
+        }
+        
+        // Обновляем файл через GitHub API
+        const updateRes = await fetch(`${GITHUB_API}/commands.json`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: `RCON command: ${command}`,
+                content: btoa(unescape(encodeURIComponent(JSON.stringify(commandData, null, 2)))),
+                sha: sha
+            })
+        });
+        
+        if (!updateRes.ok) {
+            const errData = await updateRes.json();
+            throw new Error(errData.message || 'Failed to write command');
+        }
+        
+        addLog('✅ Команда отправлена, ждем ответ...', 'success');
+        
+        // 2. Ждем ответ
+        let attempts = 0;
+        let response = null;
+        
+        while (attempts < 25) {
+            await new Promise(r => setTimeout(r, 2000));
+            
+            const respRes = await fetchNoCache(`${GITHUB_RAW}/response.json`);
+            if (respRes.ok) {
+                const data = await respRes.json();
+                if (data.id === currentId && data.status === 'done') {
+                    response = data;
+                    break;
+                }
+            }
+            attempts++;
+        }
+        
+        // Убираем "Отправка..."
+        const output = document.getElementById('consoleOutput');
+        const entries = output.querySelectorAll('.log-entry');
+        for (const entry of entries) {
+            if (entry.textContent.includes('⏳ Отправка команды...')) {
+                entry.remove();
+                break;
+            }
+        }
+        
+        if (response) {
+            addLog(`📥 ${response.result}`, 'result');
+            updateStatus();
+            document.getElementById('lastCommand').textContent = `⏳ Последняя: ${command}`;
+        } else {
+            // Проверяем логи на наличие команды
+            try {
+                const logRes = await fetchNoCache(`${GITHUB_RAW}/logs.json`);
+                if (logRes.ok) {
+                    const logs = await logRes.json();
+                    const lastLog = logs[logs.length - 1];
+                    if (lastLog && lastLog.command === command) {
+                        addLog(`✅ Команда выполнена (логи обновлены)`, 'success');
+                        updateStatus();
+                        isWaitingResponse = false;
+                        return;
+                    }
+                }
+            } catch(e) {}
+            
+            addLog('⏳ Команда отправлена, но ответ не получен', 'warning');
+            addLog('💡 Проверь response.json в репозитории', 'warning');
+        }
+        
+    } catch (err) {
+        const output = document.getElementById('consoleOutput');
+        const entries = output.querySelectorAll('.log-entry');
+        for (const entry of entries) {
+            if (entry.textContent.includes('⏳ Отправка команды...')) {
+                entry.remove();
+                break;
+            }
+        }
+        addLog(`❌ Ошибка: ${err.message}`, 'error');
+        addLog('💡 Проверь: есть ли файлы commands.json и response.json в data/', 'warning');
+    }
     
-    document.getElementById('lastCommand').textContent = `⏳ Последняя: ${command}`;
+    isWaitingResponse = false;
 }
 
 function sendCommandFromInput() {
@@ -129,66 +229,17 @@ function updateTime() {
 
 // ===== ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ =====
 function loadUsers() {
+    sendCommand('/idlist');
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     document.querySelector('[data-page="users"]')?.classList.add('active');
     document.getElementById('pageTitle').textContent = '👥 Пользователи';
-    
-    fetchNoCache(`${GITHUB_RAW}/logs.json`)
-        .then(res => {
-            if (!res.ok) throw new Error('No logs');
-            return res.json();
-        })
-        .then(data => {
-            if (data && data.length > 0) {
-                const users = {};
-                data.forEach(log => {
-                    if (log.user_id) {
-                        users[log.user_id] = {
-                            username: log.username || 'Нет',
-                            full_name: log.full_name || 'Нет'
-                        };
-                    }
-                });
-                
-                let result = '👥 СПИСОК ПОЛЬЗОВАТЕЛЕЙ\n\n';
-                for (const [uid, info] of Object.entries(users)) {
-                    result += `🆔 ${uid}\n`;
-                    if (info.username !== 'Нет') result += `👤 @${info.username}\n`;
-                    if (info.full_name !== 'Нет') result += `📛 ${info.full_name}\n`;
-                    result += '─'.repeat(20) + '\n';
-                }
-                addLog(result, 'result');
-            } else {
-                addLog('📊 Нет пользователей в логах', 'result');
-            }
-        })
-        .catch(err => {
-            addLog(`❌ Ошибка: ${err.message}`, 'error');
-        });
 }
 
 function loadStats() {
+    sendCommand('/stats');
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     document.querySelector('[data-page="stats"]')?.classList.add('active');
     document.getElementById('pageTitle').textContent = '📊 Статистика';
-    
-    fetchNoCache(`${GITHUB_RAW}/logs.json`)
-        .then(res => {
-            if (!res.ok) throw new Error('No logs');
-            return res.json();
-        })
-        .then(data => {
-            if (data && data.length > 0) {
-                const users = new Set(data.map(l => l.user_id));
-                const probes = data.filter(l => l.command && l.command.includes('whois'));
-                addLog(`📊 СТАТИСТИКА\n\n👤 Пользователей: ${users.size}\n📝 Команд: ${data.length}\n🔍 Пробивов: ${probes.length}\n🕐 Время: ${new Date().toLocaleString('ru-RU')}`, 'result');
-            } else {
-                addLog('📊 Нет данных', 'result');
-            }
-        })
-        .catch(err => {
-            addLog(`❌ Ошибка: ${err.message}`, 'error');
-        });
 }
 
 function loadBlacklist() {
@@ -293,13 +344,11 @@ function searchLogs() {
 
 // ===== ИНИЦИАЛИЗАЦИЯ =====
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🔧 Инициализация RCON v6.0...');
+    console.log('🔧 Инициализация RCON...');
     updateTime();
     setInterval(updateTime, 1000);
     updateStatus();
     setInterval(updateStatus, 30000);
-    checkBotStatus();
-    setInterval(checkBotStatus, 60000);
     
     document.getElementById('commandInput').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
@@ -317,5 +366,4 @@ document.addEventListener('DOMContentLoaded', function() {
     
     console.log(`📁 GITHUB_RAW: ${GITHUB_RAW}`);
     console.log('✅ RCON готов к работе!');
-    console.log('💡 Команды отправляй через Telegram бота @gredyr_bot');
 });
