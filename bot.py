@@ -38,9 +38,6 @@ blocked_notified = {}
 def get_msk_time():
     return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
 
-def get_msk_time_minus_days(days):
-    return (datetime.utcnow() + timedelta(hours=3) - timedelta(days=days)).strftime('%d.%m.%Y %H:%M:%S')
-
 # ========== ЧЕРНЫЙ СПИСОК ==========
 def load_blacklist():
     try:
@@ -152,7 +149,6 @@ def save_log(log_entry):
         return False
 
 def get_logs_for_user(identifier):
-    """Получает логи для конкретного пользователя по ID или username"""
     try:
         if not os.path.exists(LOGS_FILE):
             return []
@@ -160,31 +156,24 @@ def get_logs_for_user(identifier):
         with open(LOGS_FILE, 'r', encoding='utf-8') as f:
             all_logs = json.load(f)
         
-        # Определяем тип поиска
         is_id = identifier.isdigit()
-        
-        # Фильтруем логи за последние 5 дней
         five_days_ago = (datetime.utcnow() + timedelta(hours=3) - timedelta(days=5))
         
         filtered_logs = []
         for log in all_logs:
-            # Проверяем дату
             log_time_str = log.get('time', '')
             if log_time_str:
                 try:
-                    # Парсим время в формате DD.MM.YYYY HH:MM:SS
                     log_time = datetime.strptime(log_time_str, '%d.%m.%Y %H:%M:%S')
                     if log_time < five_days_ago:
                         continue
                 except:
                     pass
             
-            # Проверяем ID или username
             if is_id:
                 if str(log.get('user_id', '')) == identifier:
                     filtered_logs.append(log)
             else:
-                # Поиск по username (без @)
                 username = log.get('username', '').lower()
                 identifier_clean = identifier.lower().replace('@', '')
                 if identifier_clean in username:
@@ -196,10 +185,9 @@ def get_logs_for_user(identifier):
         return []
 
 def get_all_users():
-    """Получает список всех уникальных пользователей из логов"""
     try:
         if not os.path.exists(LOGS_FILE):
-            return []
+            return {}
         
         with open(LOGS_FILE, 'r', encoding='utf-8') as f:
             all_logs = json.load(f)
@@ -219,6 +207,146 @@ def get_all_users():
     except Exception as e:
         print(f"❌ Ошибка получения списка пользователей: {e}")
         return {}
+
+# ========== RCON ФУНКЦИИ ==========
+def execute_rcon_command(command):
+    try:
+        command = command.strip()
+        
+        if command == '/idlist':
+            users = get_all_users()
+            if not users:
+                return "📊 Нет пользователей в логах"
+            
+            result = "👥 СПИСОК ПОЛЬЗОВАТЕЛЕЙ\n\n"
+            for uid, data in users.items():
+                username = data.get('username', 'Нет')
+                full_name = data.get('full_name', 'Нет')
+                result += f"🆔 {uid}\n"
+                if username != 'Нет':
+                    result += f"👤 @{username}\n"
+                if full_name != 'Нет':
+                    result += f"📛 {full_name}\n"
+                result += "─" * 20 + "\n"
+            
+            return result
+        
+        if command == '/stats':
+            try:
+                with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+                    logs = json.load(f)
+                users = set(l.get('user_id') for l in logs)
+                probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
+                return f"📊 СТАТИСТИКА\n\n👤 Пользователей: {len(users)}\n📝 Команд: {len(logs)}\n🔍 Пробивов: {probes}\n🕐 Время: {get_msk_time()}"
+            except:
+                return "📊 Статистика временно недоступна"
+        
+        if command.startswith('/logs '):
+            identifier = command[6:].strip()
+            logs = get_logs_for_user(identifier)
+            
+            if not logs:
+                return f"❌ Логи не найдены для {identifier}"
+            
+            total_commands = len(logs)
+            probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
+            
+            result = f"📊 ЛОГИ ДЛЯ: {identifier}\n"
+            result += f"📝 Всего команд: {total_commands}\n"
+            result += f"🔍 Пробивов: {probes}\n"
+            result += f"🕐 За последние 5 дней\n\n"
+            result += "─" * 30 + "\n\n"
+            
+            for log in logs[-50:]:
+                command_text = log.get('command', 'Неизвестно')
+                time = log.get('time', '')
+                result += f"🕐 {time}\n"
+                result += f"📝 {command_text}\n"
+                if log.get('target'):
+                    result += f"🎯 {log['target']}\n"
+                result += "─" * 20 + "\n"
+            
+            return result
+        
+        if command == '/help':
+            return """📚 ДОСТУПНЫЕ КОМАНДЫ RCON
+
+📊 СТАТИСТИКА:
+/idlist - Список всех пользователей
+/stats - Общая статистика
+/logs [ID/@username] - Логи пользователя
+
+🔍 ПРОБИВ (в разработке):
+/whois ip [IP]
+/whois number [НОМЕР]
+
+⚡ УПРАВЛЕНИЕ:
+/ban [ID] [время] [причина]
+/unban [ID] [причина]
+
+💡 ТЕСТ:
+/ping - Проверка соединения
+/time - Текущее время"""
+
+        if command == '/ping':
+            return f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}"
+        
+        if command == '/time':
+            return f"🕐 МСК: {get_msk_time()}"
+        
+        if command.startswith('/ban '):
+            parts = command.split(maxsplit=3)
+            if len(parts) < 3:
+                return "❌ /ban [ID] [время в минутах] [причина]"
+            
+            target_id = parts[1]
+            try:
+                time_minutes = int(parts[2])
+            except:
+                time_minutes = 60
+            reason = parts[3] if len(parts) > 3 else "Без причины"
+            
+            add_to_blacklist(target_id, reason, MAIN_ADMIN, time_minutes)
+            
+            save_log({
+                "command": f"/ban {target_id}",
+                "user_id": MAIN_ADMIN,
+                "username": "RCON",
+                "full_name": "RCON Admin",
+                "target": target_id,
+                "reason": reason,
+                "time_minutes": time_minutes,
+                "time": get_msk_time()
+            })
+            
+            return f"✅ {target_id} Был успешно забанен в боте!\n📌 Причина: {reason}\n⏱ Время: {time_minutes} минут"
+        
+        if command.startswith('/unban '):
+            parts = command.split(maxsplit=2)
+            if len(parts) < 2:
+                return "❌ /unban [ID] [причина]"
+            
+            target_id = parts[1]
+            reason = parts[2] if len(parts) > 2 else "Без причины"
+            
+            if remove_from_blacklist(target_id):
+                save_log({
+                    "command": f"/unban {target_id}",
+                    "user_id": MAIN_ADMIN,
+                    "username": "RCON",
+                    "full_name": "RCON Admin",
+                    "target": target_id,
+                    "reason": reason,
+                    "time": get_msk_time()
+                })
+                return f"✅ {target_id} был разбанен в боте!\n📌 Причина: {reason}"
+            else:
+                return f"❌ Пользователь {target_id} не найден в черном списке"
+        
+        return f"❌ Неизвестная команда: {command}\nВведите /help для списка команд"
+    
+    except Exception as e:
+        return f"❌ Ошибка выполнения команды: {e}"
 
 # ========== УДАЛЕНИЕ В БИЗНЕС-ЧАТЕ ==========
 async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
@@ -554,7 +682,7 @@ async def handle_business_message(message: types.Message):
         
         text = message.text.strip()
         
-        # ===== АДМИН-КОМАНДЫ В БИЗНЕС-ЧАТЕ =====
+        # ===== АДМИН-КОМАНДЫ =====
         if text.lower().startswith('.idlist') or text.lower() == '.idlist':
             if not is_admin(user_id):
                 await send_to_business_chat(chat_id, "❌ У вас нет прав!", connection_id)
@@ -578,7 +706,6 @@ async def handle_business_message(message: types.Message):
                     result += f"📛 {full_name}\n"
                 result += "─" * 20 + "\n"
             
-            # Разбиваем на части если длинный
             if len(result) > 4000:
                 parts = [result[i:i+4000] for i in range(0, len(result), 4000)]
                 for part in parts:
@@ -606,7 +733,6 @@ async def handle_business_message(message: types.Message):
                 await send_to_business_chat(chat_id, f"❌ Логи не найдены для {identifier}", connection_id)
                 return
             
-            # Считаем статистику
             total_commands = len(logs)
             probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
             
@@ -616,12 +742,11 @@ async def handle_business_message(message: types.Message):
             result += f"🕐 За последние 5 дней\n\n"
             result += "─" * 30 + "\n\n"
             
-            # Показываем последние 50 команд
             for log in logs[-50:]:
-                command = log.get('command', 'Неизвестно')
+                command_text = log.get('command', 'Неизвестно')
                 time = log.get('time', '')
                 result += f"🕐 {time}\n"
-                result += f"📝 {command}\n"
+                result += f"📝 {command_text}\n"
                 if log.get('target'):
                     result += f"🎯 {log['target']}\n"
                 result += "─" * 20 + "\n"
@@ -999,7 +1124,6 @@ async def logs_command(message: types.Message):
         await message.answer(f"❌ Логи не найдены для {identifier}")
         return
     
-    # Считаем статистику
     total_commands = len(logs)
     probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
     
@@ -1009,12 +1133,11 @@ async def logs_command(message: types.Message):
     result += f"🕐 За последние 5 дней\n\n"
     result += "─" * 30 + "\n\n"
     
-    # Показываем последние 50 команд
     for log in logs[-50:]:
-        command = log.get('command', 'Неизвестно')
+        command_text = log.get('command', 'Неизвестно')
         time = log.get('time', '')
         result += f"🕐 {time}\n"
-        result += f"📝 {command}\n"
+        result += f"📝 {command_text}\n"
         if log.get('target'):
             result += f"🎯 {log['target']}\n"
         result += "─" * 20 + "\n"
