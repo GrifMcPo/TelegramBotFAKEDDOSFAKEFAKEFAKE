@@ -1,103 +1,134 @@
-// ==========================================
-//       СЮДА ВСТАВЬТЕ ВАШИ КЛЮЧИ SUPABASE
-// ==========================================
-const supabaseUrl = 'https://txyvftkhmdavtajcfkdx.supabase.co';
-const supabaseKey = 'sb_publishable_NGvqSLKswBzGx2s5s_IGCw_zM6Ct7n3';
+// ===== ВЕРСИЯ 7.0 - SUPABASE РАБОТАЕТ! =====
+console.log('🚀 RCON Client v7.0');
 
-let requestIdCounter = 1;
-const consoleDiv = document.getElementById('console');
-const inputField = document.getElementById('cmdInput');
-const sendBtn = document.getElementById('sendBtn');
+// ===== КОНФИГ SUPABASE =====
+const SUPABASE_URL = 'https://txyvftkhmdavtajcfkdx.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_NGvqSLKswBzGx2s5s_IGCw_zM6Ct7n3';
 
-function addLog(text, type = 'info') {
-    const time = new Date().toLocaleTimeString();
-    const colors = { info: '#93c5fd', success: '#bbf7d0', error: '#fecaca' };
-    
-    const line = document.createElement('div');
-    line.className = 'log-line';
-    line.innerHTML = `<span class="timestamp">[${time}]</span> <span style="color:${colors[type]}">${text}</span>`;
-    consoleDiv.appendChild(line);
-    consoleDiv.scrollTop = consoleDiv.scrollHeight;
+// ===== ДОБАВЛЕНИЕ В КОНСОЛЬ =====
+function addLog(text, type = 'result') {
+    const output = document.getElementById('consoleOutput');
+    const time = new Date().toLocaleTimeString('ru-RU');
+    const safeText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    output.innerHTML += `<div class="log-entry"><span class="time">[${time}]</span> <span class="${type}">${safeText.replace(/\n/g, '<br>')}</span></div>`;
+    output.scrollTop = output.scrollHeight;
 }
 
-async function sendCommand() {
-    const cmd = inputField.value.trim();
-    if (!cmd) return;
-
-    const currentId = requestIdCounter++;
-    addLog(`&gt; ${cmd}`, 'info');
-    inputField.value = '';
-    sendBtn.disabled = true;
-    sendBtn.textContent = 'ЖДЕМ ОТВЕТА...';
-
+// ===== ФУНКЦИЯ ЗАПРОСА К SUPABASE =====
+async function supabaseRequest(endpoint, method = 'GET', body = null) {
+    const url = `${SUPABASE_URL}/rest/v1/${endpoint}`;
+    const headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+    };
+    
+    const options = {
+        method: method,
+        headers: headers
+    };
+    
+    if (body) {
+        options.body = JSON.stringify(body);
+    }
+    
     try {
-        // 1. Отправляем команду
-        await fetch(`${supabaseUrl}/rest/v1/commands`, {
-            method: 'POST',
-            headers: {
-                apikey: supabaseKey,
-                Authorization: `Bearer ${supabaseKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ command: cmd })
-        });
-
-        // 2. Опрос таблицы responses 
-        let attempts = 0;
-        const interval = setInterval(async () => {
-            attempts++;
-            
-            try {
-                // ИСПРАВЛЕНИЕ ТУТ: фильтруем по response_id
-                const res = await fetch(`${supabaseUrl}/rest/v1/responses?response_id=eq.${currentId}&select=result,time`, {
-                    headers: { 
-                        apikey: supabaseKey, 
-                        Authorization: `Bearer ${supabaseKey}` 
-                    }
-                });
-
-                if (!res.ok) throw new Error("Network failed");
-                
-                const data = await res.json();
-
-                // Если массив не пустой - значит нашли наш ответ
-                if (data && Array.isArray(data) && data.length > 0) {
-                    clearInterval(interval);
-                    
-                    // Удаляем сообщение "ЖДЕМ", чтобы было чисто
-                    const lines = consoleDiv.querySelectorAll('.log-line');
-                    if (lines.length > 0) {
-                        const lastLine = lines[lines.length - 1];
-                        if (lastLine.innerText.includes(currentId) && lastLine.innerText.includes('ЖДЕМ')) {
-                            lastLine.remove();
-                        }
-                    }
-
-                    const resultText = data[0].result || "[Пустой ответ]";
-                    addLog(resultText.replace(/\n/g, '<br>'), 'success');
-                
-                } else if (attempts > 45) {
-                    clearInterval(interval);
-                    addLog('⏰ Время ожидания истекло.', 'error');
-                }
-
-            } catch (e) {
-                if (attempts > 45) {
-                    clearInterval(interval);
-                    addLog('❌ Ошибка связи.', 'error');
-                }
-            }
-        }, 1000); 
-        
+        const res = await fetch(url, options);
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        return await res.json();
     } catch (err) {
-        addLog(`❌ Критическая ошибка: ${err.message}`, 'error');
-        sendBtn.disabled = false;
-        sendBtn.textContent = 'EXECUTE';
+        throw new Error(`Ошибка запроса к Supabase: ${err.message}`);
     }
 }
 
-document.getElementById('cmdInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') sendCommand();
-});
+// ===== ОТПРАВКА КОМАНДЫ =====
+async function sendCommand(command) {
+    if (!command) return;
+    
+    addLog(`$ ${command}`, 'command');
+    addLog('⏳ Отправка...', 'warning');
+    
+    try {
+        // 1. Создаем запись в Supabase
+        const result = await supabaseRequest('rcon_commands', 'POST', {
+            command: command,
+            status: 'waiting'
+        });
+        
+        if (result && result.length > 0) {
+            const commandId = result[0].id;
+            addLog('✅ Команда отправлена, ждем ответ...', 'success');
+            
+            // 2. Ждем ответ
+            let attempts = 0;
+            let response = null;
+            
+            while (attempts < 25) {
+                await new Promise(r => setTimeout(r, 2000));
+                
+                try {
+                    const data = await supabaseRequest(`rcon_commands?id=eq.${commandId}&select=*`);
+                    if (data && data.length > 0 && data[0].status === 'done') {
+                        response = data[0];
+                        break;
+                    }
+                } catch (e) {}
+                attempts++;
+            }
+            
+            // Убираем "Отправка..."
+            const output = document.getElementById('consoleOutput');
+            const entries = output.querySelectorAll('.log-entry');
+            for (const entry of entries) {
+                if (entry.textContent.includes('⏳ Отправка...')) {
+                    entry.remove();
+                    break;
+                }
+            }
+            
+            if (response && response.result) {
+                addLog(response.result, 'result');
+            } else {
+                addLog('⏳ Команда отправлена, ответ не получен', 'warning');
+            }
+        } else {
+            addLog('❌ Ошибка создания команды', 'error');
+        }
+        
+    } catch (err) {
+        const output = document.getElementById('consoleOutput');
+        const entries = output.querySelectorAll('.log-entry');
+        for (const entry of entries) {
+            if (entry.textContent.includes('⏳ Отправка...')) {
+                entry.remove();
+                break;
+            }
+        }
+        addLog(`❌ Ошибка: ${err.message}`, 'error');
+    }
+}
 
-sendBtn.addEventListener('click', sendCommand);
+function sendCommandFromInput() {
+    const input = document.getElementById('commandInput');
+    const cmd = input.value.trim();
+    if (cmd) {
+        sendCommand(cmd);
+        input.value = '';
+    }
+}
+
+// ===== ИНИЦИАЛИЗАЦИЯ =====
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 RCON v7.0 готов');
+    console.log(`🔗 Supabase: ${SUPABASE_URL}`);
+    
+    document.getElementById('commandInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sendCommandFromInput();
+        }
+    });
+});
