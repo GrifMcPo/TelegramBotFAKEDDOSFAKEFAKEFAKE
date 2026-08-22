@@ -31,6 +31,8 @@ dp = Dispatcher()
 
 LOGS_FILE = "data/logs.json"
 BLACKLIST_FILE = "data/blacklist.json"
+COMMANDS_FILE = "data/commands.json"
+RESPONSE_FILE = "data/response.json"
 
 business_connections = {}
 blocked_notified = {}
@@ -208,6 +210,181 @@ def get_all_users():
     except Exception as e:
         print(f"❌ Ошибка получения списка пользователей: {e}")
         return {}
+
+# ========== ВЫПОЛНЕНИЕ КОМАНД ==========
+def execute_command(command):
+    try:
+        command = command.strip()
+        
+        if command == '/idlist':
+            users = get_all_users()
+            if not users:
+                return "📊 Нет пользователей в логах"
+            
+            result = "👥 СПИСОК ПОЛЬЗОВАТЕЛЕЙ\n\n"
+            for uid, data in users.items():
+                username = data.get('username', 'Нет')
+                full_name = data.get('full_name', 'Нет')
+                result += f"🆔 {uid}\n"
+                if username != 'Нет':
+                    result += f"👤 @{username}\n"
+                if full_name != 'Нет':
+                    result += f"📛 {full_name}\n"
+                result += "─" * 20 + "\n"
+            return result
+        
+        if command == '/stats':
+            try:
+                with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+                    logs = json.load(f)
+                users = set(l.get('user_id') for l in logs)
+                probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
+                return f"📊 СТАТИСТИКА\n\n👤 Пользователей: {len(users)}\n📝 Команд: {len(logs)}\n🔍 Пробивов: {probes}\n🕐 Время: {get_msk_time()}"
+            except:
+                return "📊 Статистика временно недоступна"
+        
+        if command.startswith('/logs '):
+            identifier = command[6:].strip()
+            logs = get_logs_for_user(identifier)
+            
+            if not logs:
+                return f"❌ Логи не найдены для {identifier}"
+            
+            total_commands = len(logs)
+            probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
+            
+            result = f"📊 ЛОГИ ДЛЯ: {identifier}\n"
+            result += f"📝 Всего команд: {total_commands}\n"
+            result += f"🔍 Пробивов: {probes}\n"
+            result += f"🕐 За последние 5 дней\n\n"
+            result += "─" * 30 + "\n\n"
+            
+            for log in logs[-50:]:
+                command_text = log.get('command', 'Неизвестно')
+                time = log.get('time', '')
+                result += f"🕐 {time}\n"
+                result += f"📝 {command_text}\n"
+                if log.get('target'):
+                    result += f"🎯 {log['target']}\n"
+                result += "─" * 20 + "\n"
+            return result
+        
+        if command == '/help':
+            return """📚 ДОСТУПНЫЕ КОМАНДЫ
+
+📊 СТАТИСТИКА:
+/idlist - Список всех пользователей
+/stats - Общая статистика
+/logs [ID/@username] - Логи пользователя
+
+⚡ УПРАВЛЕНИЕ:
+/ban [ID] [время] [причина]
+/unban [ID] [причина]
+
+💡 ТЕСТ:
+/ping - Проверка соединения
+/time - Текущее время"""
+
+        if command == '/ping':
+            return f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}"
+        
+        if command == '/time':
+            return f"🕐 МСК: {get_msk_time()}"
+        
+        if command.startswith('/ban '):
+            parts = command.split(maxsplit=3)
+            if len(parts) < 3:
+                return "❌ /ban [ID] [время в минутах] [причина]"
+            
+            target_id = parts[1]
+            try:
+                time_minutes = int(parts[2])
+            except:
+                time_minutes = 60
+            reason = parts[3] if len(parts) > 3 else "Без причины"
+            
+            add_to_blacklist(target_id, reason, MAIN_ADMIN, time_minutes)
+            
+            save_log({
+                "command": f"/ban {target_id}",
+                "user_id": MAIN_ADMIN,
+                "username": "RCON",
+                "full_name": "RCON Admin",
+                "target": target_id,
+                "reason": reason,
+                "time_minutes": time_minutes,
+                "time": get_msk_time()
+            })
+            
+            return f"✅ {target_id} Был успешно забанен в боте!\n📌 Причина: {reason}\n⏱ Время: {time_minutes} минут"
+        
+        if command.startswith('/unban '):
+            parts = command.split(maxsplit=2)
+            if len(parts) < 2:
+                return "❌ /unban [ID] [причина]"
+            
+            target_id = parts[1]
+            reason = parts[2] if len(parts) > 2 else "Без причины"
+            
+            if remove_from_blacklist(target_id):
+                save_log({
+                    "command": f"/unban {target_id}",
+                    "user_id": MAIN_ADMIN,
+                    "username": "RCON",
+                    "full_name": "RCON Admin",
+                    "target": target_id,
+                    "reason": reason,
+                    "time": get_msk_time()
+                })
+                return f"✅ {target_id} был разбанен в боте!\n📌 Причина: {reason}"
+            else:
+                return f"❌ Пользователь {target_id} не найден в черном списке"
+        
+        return f"❌ Неизвестная команда: {command}\nВведите /help для списка команд"
+    
+    except Exception as e:
+        return f"❌ Ошибка выполнения команды: {e}"
+
+# ========== ОБРАБОТЧИК КОМАНД ИЗ ФАЙЛА ==========
+async def process_commands_from_file():
+    """Читает команды из commands.json и пишет ответ в response.json"""
+    while True:
+        try:
+            if os.path.exists(COMMANDS_FILE):
+                with open(COMMANDS_FILE, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                command_id = data.get('id')
+                command = data.get('command', '').strip()
+                
+                if command and command_id:
+                    print(f"📥 Получена команда из файла: {command}")
+                    
+                    # Выполняем команду
+                    result = execute_command(command)
+                    
+                    # Пишем ответ
+                    response_data = {
+                        'id': command_id,
+                        'command': command,
+                        'result': result,
+                        'time': get_msk_time(),
+                        'status': 'done'
+                    }
+                    
+                    with open(RESPONSE_FILE, 'w', encoding='utf-8') as f:
+                        json.dump(response_data, f, indent=2, ensure_ascii=False)
+                    
+                    print(f"✅ Ответ записан в {RESPONSE_FILE}")
+                    
+                    # Очищаем файл команд
+                    with open(COMMANDS_FILE, 'w', encoding='utf-8') as f:
+                        json.dump({'id': None, 'command': ''}, f)
+            
+        except Exception as e:
+            print(f"❌ Ошибка обработки команд: {e}")
+        
+        await asyncio.sleep(3)
 
 # ========== УДАЛЕНИЕ В БИЗНЕС-ЧАТЕ ==========
 async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
@@ -1250,8 +1427,11 @@ async def handle_callback(callback: types.CallbackQuery):
 
 async def main():
     print("=" * 60)
-    print("🔥 БОТ ЗАПУЩЕН!")
+    print("🔥 БОТ ЗАПУЩЕН С RCON!")
     print(f"👤 АДМИН: {MAIN_ADMIN}")
+    print(f"📁 Файл логов: {LOGS_FILE}")
+    print(f"📁 Файл команд: {COMMANDS_FILE}")
+    print(f"📁 Файл ответов: {RESPONSE_FILE}")
     print("📌 Команды с / — в личке бота")
     print("📌 Команды с . — в чатах с собеседниками")
     print("=" * 60)
@@ -1260,14 +1440,22 @@ async def main():
     os.makedirs('data', exist_ok=True)
     
     # Создаем файлы
-    for file in [LOGS_FILE, BLACKLIST_FILE]:
+    for file in [LOGS_FILE, BLACKLIST_FILE, COMMANDS_FILE, RESPONSE_FILE]:
         if not os.path.exists(file):
             with open(file, 'w', encoding='utf-8') as f:
-                if file == BLACKLIST_FILE:
+                if file == COMMANDS_FILE:
+                    json.dump({'id': None, 'command': ''}, f)
+                elif file == RESPONSE_FILE:
+                    json.dump({'id': None, 'command': '', 'result': '', 'status': 'waiting'}, f)
+                elif file == BLACKLIST_FILE:
                     json.dump({}, f)
                 else:
                     json.dump([], f)
             print(f"✅ Создан файл: {file}")
+    
+    # Запускаем обработчик команд в фоне
+    asyncio.create_task(process_commands_from_file())
+    print("✅ Обработчик команд запущен")
     
     try:
         await dp.start_polling(bot)
