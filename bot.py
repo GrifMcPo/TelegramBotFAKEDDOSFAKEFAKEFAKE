@@ -14,6 +14,9 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types import BusinessConnection
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import threading
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,13 +32,17 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-LOGS_FILE = "logs.json"
-BLACKLIST_FILE = "blacklist.json"
-COMMANDS_FILE = "commands.json"
-RESPONSE_FILE = "response.json"
+LOGS_FILE = "data/logs.json"
+BLACKLIST_FILE = "data/blacklist.json"
+COMMANDS_FILE = "data/commands.json"
+RESPONSE_FILE = "data/response.json"
 
 business_connections = {}
 blocked_notified = {}
+
+# ===== FLASK API =====
+app = Flask(__name__)
+CORS(app)
 
 def get_msk_time():
     return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
@@ -128,6 +135,7 @@ def is_admin(user_id):
 # ========== ЛОГИ ==========
 def save_log(log_entry):
     try:
+        os.makedirs(os.path.dirname(LOGS_FILE), exist_ok=True)
         logs = []
         if os.path.exists(LOGS_FILE):
             try:
@@ -344,41 +352,80 @@ def execute_command(command):
     except Exception as e:
         return f"❌ Ошибка выполнения команды: {e}"
 
-# ========== ОБРАБОТЧИК КОМАНД ИЗ ФАЙЛА ==========
-async def process_commands_from_file():
-    while True:
-        try:
-            if os.path.exists(COMMANDS_FILE):
-                with open(COMMANDS_FILE, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                
-                command_id = data.get('id')
-                command = data.get('command', '').strip()
-                
-                if command and command_id:
-                    print(f"📥 Получена команда из файла: {command}")
-                    result = execute_command(command)
-                    
-                    response_data = {
-                        'id': command_id,
-                        'command': command,
-                        'result': result,
-                        'time': get_msk_time(),
-                        'status': 'done'
-                    }
-                    
-                    with open(RESPONSE_FILE, 'w', encoding='utf-8') as f:
-                        json.dump(response_data, f, indent=2, ensure_ascii=False)
-                    
-                    print(f"✅ Ответ записан в {RESPONSE_FILE}")
-                    
-                    with open(COMMANDS_FILE, 'w', encoding='utf-8') as f:
-                        json.dump({'id': None, 'command': ''}, f)
-            
-        except Exception as e:
-            print(f"❌ Ошибка обработки команд: {e}")
+# ========== FLASK API ДЛЯ САЙТА ==========
+@app.route('/api/command', methods=['POST'])
+def api_command():
+    try:
+        data = request.json
+        command = data.get('command', '').strip()
         
-        await asyncio.sleep(3)
+        if not command:
+            return jsonify({'status': 'error', 'message': 'Команда не указана'}), 400
+        
+        result = execute_command(command)
+        
+        return jsonify({
+            'status': 'success',
+            'command': command,
+            'result': result,
+            'time': get_msk_time()
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/stats', methods=['GET'])
+def api_stats():
+    try:
+        with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+            logs = json.load(f)
+        users = set(l.get('user_id') for l in logs)
+        probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
+        return jsonify({
+            'status': 'success',
+            'users': len(users),
+            'commands': len(logs),
+            'probes': probes,
+            'time': get_msk_time()
+        })
+    except:
+        return jsonify({'status': 'error', 'message': 'Статистика недоступна'}), 500
+
+@app.route('/api/blacklist', methods=['GET'])
+def api_blacklist():
+    try:
+        blacklist = load_blacklist()
+        return jsonify({
+            'status': 'success',
+            'blacklist': blacklist,
+            'count': len(blacklist)
+        })
+    except:
+        return jsonify({'status': 'error', 'message': 'Черный список недоступен'}), 500
+
+@app.route('/api/users', methods=['GET'])
+def api_users():
+    try:
+        users = get_all_users()
+        return jsonify({
+            'status': 'success',
+            'users': users,
+            'count': len(users)
+        })
+    except:
+        return jsonify({'status': 'error', 'message': 'Список пользователей недоступен'}), 500
+
+@app.route('/api/logs/<identifier>', methods=['GET'])
+def api_logs(identifier):
+    try:
+        logs = get_logs_for_user(identifier)
+        return jsonify({
+            'status': 'success',
+            'identifier': identifier,
+            'logs': logs,
+            'count': len(logs)
+        })
+    except:
+        return jsonify({'status': 'error', 'message': 'Логи недоступны'}), 500
 
 # ========== УДАЛЕНИЕ В БИЗНЕС-ЧАТЕ ==========
 async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
@@ -1419,36 +1466,36 @@ async def handle_callback(callback: types.CallbackQuery):
         await stats_command(callback.message)
         await callback.answer()
 
-# ========== ЗАПУСК ==========
+# ========== ЗАПУСК API ==========
+def run_api():
+    app.run(host='0.0.0.0', port=8080, debug=False)
+
 async def main():
     print("=" * 60)
-    print("🔥 БОТ ЗАПУЩЕН!")
+    print("🔥 БОТ ЗАПУЩЕН С API!")
     print(f"👤 АДМИН: {MAIN_ADMIN}")
-    print(f"📁 Файл логов: {LOGS_FILE}")
-    print(f"📁 Файл черного списка: {BLACKLIST_FILE}")
-    print(f"📁 Файл команд: {COMMANDS_FILE}")
-    print(f"📁 Файл ответов: {RESPONSE_FILE}")
+    print(f"🌐 API: http://localhost:8080")
     print("📌 Команды с / — в личке бота")
     print("📌 Команды с . — в чатах с собеседниками")
     print("=" * 60)
     
+    # Создаем папку data
+    os.makedirs('data', exist_ok=True)
+    
     # Создаем файлы
-    for file in [LOGS_FILE, BLACKLIST_FILE, COMMANDS_FILE, RESPONSE_FILE]:
+    for file in [LOGS_FILE, BLACKLIST_FILE]:
         if not os.path.exists(file):
             with open(file, 'w', encoding='utf-8') as f:
-                if file == COMMANDS_FILE:
-                    json.dump({'id': None, 'command': ''}, f)
-                elif file == RESPONSE_FILE:
-                    json.dump({'id': None, 'command': '', 'result': '', 'status': 'waiting'}, f)
-                elif file == BLACKLIST_FILE:
+                if file == BLACKLIST_FILE:
                     json.dump({}, f)
                 else:
                     json.dump([], f)
             print(f"✅ Создан файл: {file}")
     
-    # Запускаем обработчик команд в фоне
-    asyncio.create_task(process_commands_from_file())
-    print("✅ Обработчик команд запущен")
+    # Запускаем API в отдельном потоке
+    api_thread = threading.Thread(target=run_api, daemon=True)
+    api_thread.start()
+    print("✅ API сервер запущен на порту 8080")
     
     try:
         await dp.start_polling(bot)
