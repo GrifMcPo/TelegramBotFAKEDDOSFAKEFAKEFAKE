@@ -1,17 +1,19 @@
-// ===== ВЕРСИЯ 4.0 - БЕЗ CORS =====
-console.log('🚀 RCON Client v4.0 (No CORS)');
+// ===== ВЕРСИЯ 6.0 =====
+console.log('🚀 RCON Client v6.0');
 
 // ===== КОНФИГ =====
-// Используем относительный путь - данные берутся из docs/ папки
-const DATA_PATH = '/TelegramBotFAKEDDOSFAKEFAKEFAKE/data';
+const API_URL = 'https://api.github.com/repos/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/contents/data';
+const GITHUB_RAW = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/data';
 const CACHE_BUSTER = Date.now();
 
-// ===== ФУНКЦИЯ ЗАПРОСА БЕЗ КЭША =====
-function fetchNoCache(url) {
+// ===== ФУНКЦИЯ ЗАПРОСА =====
+function fetchNoCache(url, options = {}) {
     const separator = url.includes('?') ? '&' : '?';
     return fetch(`${url}${separator}_=${CACHE_BUSTER}`, {
+        ...options,
         cache: 'no-cache',
         headers: {
+            ...options.headers,
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
             'Expires': '0'
@@ -33,7 +35,7 @@ function addLog(text, type = 'result') {
 // ===== ПРОВЕРКА БОТА =====
 async function checkBotStatus() {
     try {
-        const res = await fetchNoCache(`${DATA_PATH}/logs.json`);
+        const res = await fetchNoCache(`${GITHUB_RAW}/logs.json`);
         if (res.ok) {
             const data = await res.json();
             if (data && data.length > 0) {
@@ -58,8 +60,8 @@ async function checkBotStatus() {
     }
 }
 
-// ===== ОТПРАВКА КОМАНДЫ (ЧЕРЕЗ TELEGRAM) =====
-function sendCommand(command) {
+// ===== ОТПРАВКА КОМАНДЫ =====
+async function sendCommand(command) {
     if (!command) return;
     
     addLog(`$ ${command}`, 'command');
@@ -86,7 +88,7 @@ function sendCommandFromInput() {
 
 // ===== ОБНОВЛЕНИЕ СТАТУСА =====
 function updateStatus() {
-    fetchNoCache(`${DATA_PATH}/logs.json`)
+    fetchNoCache(`${GITHUB_RAW}/logs.json`)
         .then(res => {
             if (!res.ok) throw new Error('No logs');
             return res.json();
@@ -131,7 +133,7 @@ function loadUsers() {
     document.querySelector('[data-page="users"]')?.classList.add('active');
     document.getElementById('pageTitle').textContent = '👥 Пользователи';
     
-    fetchNoCache(`${DATA_PATH}/logs.json`)
+    fetchNoCache(`${GITHUB_RAW}/logs.json`)
         .then(res => {
             if (!res.ok) throw new Error('No logs');
             return res.json();
@@ -170,7 +172,7 @@ function loadStats() {
     document.querySelector('[data-page="stats"]')?.classList.add('active');
     document.getElementById('pageTitle').textContent = '📊 Статистика';
     
-    fetchNoCache(`${DATA_PATH}/logs.json`)
+    fetchNoCache(`${GITHUB_RAW}/logs.json`)
         .then(res => {
             if (!res.ok) throw new Error('No logs');
             return res.json();
@@ -194,7 +196,7 @@ function loadBlacklist() {
     document.querySelector('[data-page="blacklist"]')?.classList.add('active');
     document.getElementById('pageTitle').textContent = '⛔ Черный список';
     
-    fetchNoCache(`${DATA_PATH}/blacklist.json`)
+    fetchNoCache(`${GITHUB_RAW}/blacklist.json`)
         .then(res => {
             if (!res.ok) throw new Error('Blacklist unavailable');
             return res.json();
@@ -247,7 +249,7 @@ function searchLogs() {
     
     document.getElementById('logsResult').innerHTML = '⏳ Загрузка...';
     
-    fetchNoCache(`${DATA_PATH}/logs.json`)
+    fetchNoCache(`${GITHUB_RAW}/logs.json`)
         .then(res => {
             if (!res.ok) throw new Error('Logs unavailable');
             return res.json();
@@ -291,7 +293,7 @@ function searchLogs() {
 
 // ===== ИНИЦИАЛИЗАЦИЯ =====
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🔧 Инициализация RCON v4.0...');
+    console.log('🔧 Инициализация RCON v6.0...');
     updateTime();
     setInterval(updateTime, 1000);
     updateStatus();
@@ -313,7 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    console.log(`📁 DATA_PATH: ${DATA_PATH}`);
+    console.log(`📁 GITHUB_RAW: ${GITHUB_RAW}`);
     console.log('✅ RCON готов к работе!');
     console.log('💡 Команды отправляй через Telegram бота @gredyr_bot');
 });
