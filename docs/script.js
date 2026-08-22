@@ -1,125 +1,79 @@
-// ===== ВЕРСИЯ 8.0 - MINIMAL =====
-console.log('🚀 RCON Client v8.0');
-
-// ===== КОНФИГ SUPABASE =====
+// =============== НАСТРОЙКИ ===============
 const SUPABASE_URL = 'https://txyvftkhmdavtajcfkdx.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_NGvqSLKswBzGx2s5s_IGCw_zM6Ct7n3';
 
-// ===== ДОБАВЛЕНИЕ В КОНСОЛЬ =====
-function addLog(text, type = 'result') {
-    const output = document.getElementById('consoleOutput');
-    const time = new Date().toLocaleTimeString('ru-RU');
-    const safeText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    output.innerHTML += `<div class="log-entry"><span class="time">[${time}]</span> <span class="${type}">${safeText.replace(/\n/g, '<br>')}</span></div>`;
-    output.scrollTop = output.scrollHeight;
-}
+// Создаем клиента Supabase
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ===== ФУНКЦИЯ ЗАПРОСА К SUPABASE =====
-async function supabaseRequest(endpoint, method = 'GET', body = null) {
-    const url = `${SUPABASE_URL}/rest/v1/${endpoint}`;
-    const headers = {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-    };
-    
-    const options = { method, headers };
-    if (body) options.body = JSON.stringify(body);
-    
-    try {
-        const res = await fetch(url, options);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return await res.json();
-    } catch (err) {
-        throw new Error(`Ошибка: ${err.message}`);
-    }
-}
+// Находим элементы DOM
+const commandInput = document.getElementById('command-input');
+const sendBtn = document.getElementById('send-btn');
+const responseArea = document.getElementById('response-area');
 
-// ===== ОТПРАВКА КОМАНДЫ =====
-async function sendCommand(command) {
-    if (!command) return;
+async function sendCommand() {
+    const text = commandInput.value.trim();
     
-    addLog(`$ ${command}`, 'command');
-    addLog('⏳ Отправка...', 'warning');
-    
+    if (!text) return;
+
+    // Блокируем интерфейс
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Отправка...';
+    responseArea.style.display = 'none';
+
     try {
-        // 1. Пишем команду в таблицу commands
-        const result = await supabaseRequest('commands', 'POST', {
-            command: command
+        // 1. Записываем команду в таблицу commands
+        const { error: cmdError } = await supabase.from('commands').insert({
+            command: text,
         });
-        
-        if (result && result.length > 0) {
-            const commandId = result[0].id;
-            addLog('✅ Команда отправлена, ждем ответ...', 'success');
+
+        if (cmdError) throw new Error(cmdError.message || 'Ошибка записи команды');
+
+        // 2. Ожидаем появления ответа от бота (поллинг)
+        let attempts = 0;
+        const interval = setInterval(async () => {
+            attempts++;
             
-            // 2. Ждем ответ
-            let attempts = 0;
-            let response = null;
-            
-            while (attempts < 25) {
-                await new Promise(r => setTimeout(r, 2000));
+            // Ищем нашу свежую запись по тексту команды
+            const { data: checkData, error: checkError } = await supabase
+                .from('commands')
+                .select('response_id')
+                .eq('command', text)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (checkError) {
+                clearInterval(interval);
+                showResult(`❌ Ошибка БД: ${checkError.message}`, true);
+                return;
+            }
+
+            // Если bot.py прописал response_id — значит ответ готов
+            if (checkData && checkData.response_id) {
+                clearInterval(interval);
                 
-                try {
-                    // Ищем response с response_id = commandId
-                    const data = await supabaseRequest(`responses?response_id=eq.${commandId}&select=*`);
-                    if (data && data.length > 0) {
-                        response = data[0];
-                        break;
-                    }
-                } catch (e) {}
-                attempts++;
-            }
-            
-            // Убираем "Отправка..."
-            const output = document.getElementById('consoleOutput');
-            const entries = output.querySelectorAll('.log-entry');
-            for (const entry of entries) {
-                if (entry.textContent.includes('⏳ Отправка...')) {
-                    entry.remove();
-                    break;
+                // Забираем результат выполнения
+                const { data: respData, error: respError } = await supabase
+                    .from('responses')
+                    .select('result, time')
+                    .eq('id', checkData.response_id)
+                    .single();
+
+                if (respError) {
+                    showResult(`❌ Ошибка получения: ${respError.message}`, true);
+                } else {
+                    showResult(respData.result + '\n\n⏱ Время: ' + respData.time, false);
                 }
+            } else if (attempts > 20) {
+                // Таймаут 20 секунд
+                clearInterval(interval);
+                showResult('⚠️ Бот не ответил за 20 секунд.', true);
             }
-            
-            if (response && response.result) {
-                addLog(response.result, 'result');
-            } else {
-                addLog('⏳ Команда отправлена, ответ не получен', 'warning');
-            }
-        } else {
-            addLog('❌ Ошибка создания команды', 'error');
-        }
-        
+        }, 1000); 
+
     } catch (err) {
-        const output = document.getElementById('consoleOutput');
-        const entries = output.querySelectorAll('.log-entry');
-        for (const entry of entries) {
-            if (entry.textContent.includes('⏳ Отправка...')) {
-                entry.remove();
-                break;
-            }
-        }
-        addLog(`❌ ${err.message}`, 'error');
-    }
-}
-
-function sendCommandFromInput() {
-    const input = document.getElementById('commandInput');
-    const cmd = input.value.trim();
-    if (cmd) {
-        sendCommand(cmd);
-        input.value = '';
-    }
-}
-
-// ===== ИНИЦИАЛИЗАЦИЯ =====
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 RCON v8.0 готов');
-    
-    document.getElementById('commandInput').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            sendCommandFromInput();
-        }
-    });
-});
+        console.error(err);
+        showResult('Критическая ошибка сети.', true);
+    } finally {
+        sendBtn.disabled = false;
+        sendBtn.
