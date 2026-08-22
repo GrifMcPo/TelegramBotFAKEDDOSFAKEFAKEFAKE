@@ -22,6 +22,10 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MAIN_ADMIN = 8308522569
 
+# ===== НАСТРОЙКИ ДЛЯ САЙТА =====
+SITE_URL = os.getenv("SITE_URL", "https://ваш-сайт.ru")  # Замените на ваш URL
+SITE_API_KEY = os.getenv("SITE_API_KEY", "")  # API ключ если нужен
+
 if not BOT_TOKEN:
     print("❌ Токен не найден!")
     sys.exit(1)
@@ -123,13 +127,38 @@ def get_blacklist_reason(user_id):
 def is_admin(user_id):
     return user_id == MAIN_ADMIN
 
-# ========== ЛОГИ (ИСПРАВЛЕННЫЕ) ==========
-def save_log(log_entry):
-    """Сохраняет запись в лог-файл"""
+# ========== ЛОГИ (В ФАЙЛ И НА САЙТ) ==========
+def send_log_to_site(log_entry):
+    """Отправляет лог на сайт через API"""
     try:
-        print(f"📝 СОХРАНЯЮ ЛОГ: {log_entry}")
+        if not SITE_URL or SITE_URL == "https://ваш-сайт.ru":
+            print("⚠️ SITE_URL не настроен, пропускаем отправку на сайт")
+            return False
         
-        # Загружаем существующие логи
+        url = f"{SITE_URL}/api/logs"
+        headers = {
+            "Content-Type": "application/json",
+            "X-API-Key": SITE_API_KEY if SITE_API_KEY else ""
+        }
+        
+        response = requests.post(url, json=log_entry, headers=headers, timeout=5)
+        
+        if response.status_code == 200 or response.status_code == 201:
+            print(f"✅ Лог отправлен на сайт: {log_entry.get('command', 'unknown')}")
+            return True
+        else:
+            print(f"⚠️ Ошибка отправки на сайт: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        print(f"❌ Ошибка отправки на сайт: {e}")
+        return False
+
+def save_log_local(log_entry):
+    """Сохраняет лог в локальный файл"""
+    try:
+        # Создаем папку если нужно
+        os.makedirs(os.path.dirname(LOGS_FILE) if os.path.dirname(LOGS_FILE) else '.', exist_ok=True)
+        
         logs = []
         if os.path.exists(LOGS_FILE):
             try:
@@ -139,32 +168,43 @@ def save_log(log_entry):
                         logs = json.loads(content)
                         if not isinstance(logs, list):
                             logs = []
-                    else:
-                        logs = []
-            except json.JSONDecodeError:
-                print(f"⚠️ Ошибка парсинга JSON, создаю новый файл")
+            except:
                 logs = []
-            except Exception as e:
-                print(f"⚠️ Ошибка чтения логов: {e}")
-                logs = []
-        else:
-            print(f"📄 Файл {LOGS_FILE} не найден, создаю новый")
         
-        # Добавляем новую запись
         logs.append(log_entry)
         
-        # Сохраняем
         with open(LOGS_FILE, 'w', encoding='utf-8') as f:
             json.dump(logs, f, indent=2, ensure_ascii=False)
         
-        print(f"✅ Лог сохранен в {LOGS_FILE}: {log_entry.get('command', 'unknown')}")
-        print(f"📊 Всего записей в логе: {len(logs)}")
+        print(f"✅ Лог сохранен в файл: {log_entry.get('command', 'unknown')}")
         return True
     except Exception as e:
-        print(f"❌ Ошибка сохранения лога: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Ошибка сохранения в файл: {e}")
         return False
+
+def save_log(log_entry):
+    """Главная функция сохранения лога - в файл и на сайт"""
+    print(f"📝 СОХРАНЯЮ ЛОГ: {log_entry}")
+    
+    # Добавляем время если нет
+    if 'time' not in log_entry:
+        log_entry['time'] = get_msk_time()
+    
+    # 1. Сохраняем в файл
+    local_success = save_log_local(log_entry)
+    
+    # 2. Отправляем на сайт
+    site_success = send_log_to_site(log_entry)
+    
+    # 3. Выводим результат
+    if local_success and site_success:
+        print(f"✅ Лог сохранен везде")
+    elif local_success:
+        print(f"⚠️ Лог сохранен только в файл (сайт недоступен)")
+    else:
+        print(f"❌ Ошибка сохранения лога")
+    
+    return local_success or site_success
 
 # ========== УДАЛЕНИЕ В БИЗНЕС-ЧАТЕ ==========
 async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
@@ -452,19 +492,14 @@ def get_main_keyboard():
 # ========== BUSINESS CONNECTION ==========
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
-    logger.info(f"🔔 ПОЛУЧЕНО БИЗНЕС-ПОДКЛЮЧЕНИЕ: {connection}")
-    
     if connection.user:
         user_id = connection.user.id
         connection_id = connection.id
         username = connection.user.username or "Нет юзернейма"
         
-        logger.info(f"👤 USER: {user_id}, USERNAME: @{username}, CONNECTION_ID: {connection_id}")
-        
         business_connections[str(user_id)] = connection_id
-        logger.info(f"✅ СОХРАНЕНО В business_connections: {business_connections}")
         
-        logger.info(f"🔗 BUSINESS CONNECTION УСПЕШНО: @{username} (ID: {user_id})")
+        logger.info(f"🔗 BUSINESS CONNECTION: @{username} (ID: {user_id})")
         
         await bot.send_message(
             chat_id=user_id,
@@ -483,11 +518,8 @@ async def handle_business_message(message: types.Message):
         message_id = message.message_id
         connection_id = message.business_connection_id
         
-        logger.info(f"📩 ПОЛУЧЕНО СООБЩЕНИЕ В БИЗНЕС-ЧАТЕ от {user_id}: {message.text}")
-        
         if str(user_id) not in business_connections and connection_id:
             business_connections[str(user_id)] = connection_id
-            logger.info(f"✅ СОХРАНЕН connection_id для {user_id}")
         
         if is_blacklisted(user_id):
             if str(user_id) not in blocked_notified:
@@ -509,86 +541,6 @@ async def handle_business_message(message: types.Message):
         text = message.text.strip()
         
         if not text.startswith('.'):
-            return
-        
-        logger.info(f"✅ ПОЛУЧЕНА КОМАНДА: {text} от {user_id}")
-        
-        # .ban
-        if text.lower().startswith('.ban'):
-            if not is_admin(user_id):
-                await send_to_business_chat(chat_id, "❌ У вас нет прав на бан!", connection_id)
-                return
-            
-            await delete_business_message(chat_id, message_id, connection_id)
-            
-            parts = text.split(maxsplit=3)
-            if len(parts) < 3:
-                await send_to_business_chat(chat_id, "❌ .ban [ID] [время в минутах] [причина]", connection_id)
-                return
-            
-            target_id = parts[1]
-            try:
-                time_minutes = int(parts[2])
-            except:
-                time_minutes = 60
-            reason = parts[3] if len(parts) > 3 else "Без причины"
-            
-            add_to_blacklist(target_id, reason, user_id, time_minutes)
-            
-            await send_to_business_chat(
-                chat_id,
-                f"✅ {target_id} Был успешно забанен в боте!\n📌 Причина: {reason}\n⏱ Время: {time_minutes} минут",
-                connection_id
-            )
-            
-            try:
-                time_str = f"{time_minutes} минут" if time_minutes > 0 else "навсегда"
-                await bot.send_message(
-                    chat_id=target_id,
-                    text=f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}\n⏱ Время: {time_str}"
-                )
-            except:
-                pass
-            
-            logger.info(f"🔨 Бан: {target_id} от {user_id} на {time_minutes} мин")
-            return
-        
-        # .unban
-        if text.lower().startswith('.unban'):
-            if not is_admin(user_id):
-                await send_to_business_chat(chat_id, "❌ У вас нет прав на разбан!", connection_id)
-                return
-            
-            await delete_business_message(chat_id, message_id, connection_id)
-            
-            parts = text.split(maxsplit=2)
-            if len(parts) < 2:
-                await send_to_business_chat(chat_id, "❌ .unban [ID] [причина]", connection_id)
-                return
-            
-            target_id = parts[1]
-            reason = parts[2] if len(parts) > 2 else "Без причины"
-            
-            if remove_from_blacklist(target_id):
-                await send_to_business_chat(
-                    chat_id,
-                    f"✅ {target_id} был разбанен в боте!\n📌 Причина: {reason}",
-                    connection_id
-                )
-                
-                try:
-                    await bot.send_message(
-                        chat_id=target_id,
-                        text=f"✅ ВАС РАЗБАНИЛИ В БОТЕ!\n\n📌 Причина: {reason}"
-                    )
-                except:
-                    pass
-            else:
-                await send_to_business_chat(
-                    chat_id,
-                    f"❌ Пользователь {target_id} не найден в черном списке",
-                    connection_id
-                )
             return
         
         # .help
@@ -690,8 +642,6 @@ async def handle_business_message(message: types.Message):
         
     except Exception as e:
         logger.error(f"❌ Ошибка бизнес-сообщения: {e}")
-        import traceback
-        traceback.print_exc()
 
 # ========== ПРОБИВ В БИЗНЕС-ЧАТЕ ==========
 async def probe_ip_business(chat_id, ip, connection_id, user_id, message):
@@ -774,7 +724,6 @@ async def probe_phone_business(chat_id, phone, connection_id, user_id, message):
 @dp.message(Command("start"))
 async def start(message: types.Message):
     user_id = message.from_user.id
-    print(f"🔹 Команда /start от {user_id}")
     
     if is_blacklisted(user_id):
         if str(user_id) not in blocked_notified:
@@ -801,7 +750,6 @@ async def start(message: types.Message):
 @dp.message(Command("help"))
 async def help_command(message: types.Message):
     user_id = message.from_user.id
-    print(f"🔹 Команда /help от {user_id}")
     
     if is_blacklisted(user_id):
         if str(user_id) not in blocked_notified:
@@ -838,8 +786,6 @@ async def help_command(message: types.Message):
 @dp.message(Command("ping"))
 async def ping(message: types.Message):
     user_id = message.from_user.id
-    print(f"🔹 Команда /ping от {user_id}")
-    
     if is_blacklisted(user_id):
         if str(user_id) not in blocked_notified:
             reason = get_blacklist_reason(user_id)
@@ -851,8 +797,6 @@ async def ping(message: types.Message):
 @dp.message(Command("time"))
 async def time_command(message: types.Message):
     user_id = message.from_user.id
-    print(f"🔹 Команда /time от {user_id}")
-    
     if is_blacklisted(user_id):
         if str(user_id) not in blocked_notified:
             reason = get_blacklist_reason(user_id)
@@ -864,8 +808,6 @@ async def time_command(message: types.Message):
 @dp.message(Command("info"))
 async def info_command(message: types.Message):
     user_id = message.from_user.id
-    print(f"🔹 Команда /info от {user_id}")
-    
     if is_blacklisted(user_id):
         if str(user_id) not in blocked_notified:
             reason = get_blacklist_reason(user_id)
@@ -884,8 +826,6 @@ async def info_command(message: types.Message):
 @dp.message(Command("stats"))
 async def stats_command(message: types.Message):
     user_id = message.from_user.id
-    print(f"🔹 Команда /stats от {user_id}")
-    
     if is_blacklisted(user_id):
         if str(user_id) not in blocked_notified:
             reason = get_blacklist_reason(user_id)
@@ -904,14 +844,12 @@ async def stats_command(message: types.Message):
             f"🔍 Пробивов: {probes}\n"
             f"🕐 Время: {get_msk_time()}"
         )
-    except Exception as e:
-        print(f"⚠️ Ошибка статистики: {e}")
+    except:
         await message.answer("📊 Статистика временно недоступна")
 
 @dp.message(Command("whois"))
 async def whois_command(message: types.Message):
     user_id = message.from_user.id
-    print(f"🔹 Команда /whois от {user_id}")
     
     if is_blacklisted(user_id):
         if str(user_id) not in blocked_notified:
@@ -936,8 +874,6 @@ async def whois_command(message: types.Message):
         await message.answer("❌ Используйте: /whois ip [IP] или /whois number [НОМЕР]")
 
 async def probe_ip_command(message: types.Message, ip: str):
-    print(f"🔍 Пробив IP: {ip} от {message.from_user.id}")
-    
     try:
         ipaddress.ip_address(ip)
     except:
@@ -976,8 +912,6 @@ async def probe_ip_command(message: types.Message, ip: str):
     )
 
 async def probe_phone_command(message: types.Message, phone: str):
-    print(f"📱 Пробив номера: {phone} от {message.from_user.id}")
-    
     save_log({
         "command": f"/whois number {phone}",
         "user_id": message.from_user.id,
@@ -1015,9 +949,7 @@ async def probe_phone_command(message: types.Message, phone: str):
 
 @dp.message(Command("ban"))
 async def ban_command(message: types.Message):
-    user_id = message.from_user.id
-    print(f"🔨 Команда /ban от {user_id}")
-    
+    user_id = message.from_user.id    
     if not is_admin(user_id):
         await message.answer("❌ У вас нет прав на бан!")
         return
@@ -1036,6 +968,17 @@ async def ban_command(message: types.Message):
     
     add_to_blacklist(target_id, reason, user_id, time_minutes)
     
+    save_log({
+        "command": f"/ban {target_id}",
+        "user_id": user_id,
+        "username": message.from_user.username or "Нет",
+        "full_name": message.from_user.full_name or "Нет",
+        "target": target_id,
+        "reason": reason,
+        "time_minutes": time_minutes,
+        "time": get_msk_time()
+    })
+    
     await message.answer(f"✅ {target_id} Был успешно забанен в боте!\n📌 Причина: {reason}\n⏱ Время: {time_minutes} минут")
     
     try:
@@ -1050,7 +993,6 @@ async def ban_command(message: types.Message):
 @dp.message(Command("unban"))
 async def unban_command(message: types.Message):
     user_id = message.from_user.id
-    print(f"🔓 Команда /unban от {user_id}")
     
     if not is_admin(user_id):
         await message.answer("❌ У вас нет прав на разбан!")
@@ -1065,6 +1007,16 @@ async def unban_command(message: types.Message):
     reason = args[2] if len(args) > 2 else "Без причины"
     
     if remove_from_blacklist(target_id):
+        save_log({
+            "command": f"/unban {target_id}",
+            "user_id": user_id,
+            "username": message.from_user.username or "Нет",
+            "full_name": message.from_user.full_name or "Нет",
+            "target": target_id,
+            "reason": reason,
+            "time": get_msk_time()
+        })
+        
         await message.answer(f"✅ {target_id} был разбанен в боте!\n📌 Причина: {reason}")
         
         try:
@@ -1080,7 +1032,6 @@ async def unban_command(message: types.Message):
 @dp.message()
 async def handle_private_message(message: types.Message):
     user_id = message.from_user.id
-    text = message.text.strip() if message.text else ""
     
     if is_blacklisted(user_id):
         if str(user_id) not in blocked_notified:
@@ -1089,8 +1040,10 @@ async def handle_private_message(message: types.Message):
             blocked_notified[str(user_id)] = True
         return
     
-    if not text:
+    if not message.text:
         return
+    
+    text = message.text.strip()
     
     if text.startswith('/'):
         return
@@ -1111,7 +1064,6 @@ async def handle_private_message(message: types.Message):
 @dp.callback_query()
 async def handle_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
-    print(f"🔘 Кнопка от {user_id}: {callback.data}")
     
     if is_blacklisted(user_id):
         if str(user_id) not in blocked_notified:
@@ -1139,18 +1091,16 @@ async def main():
     print(f"👤 АДМИН: {MAIN_ADMIN}")
     print(f"📁 Файл логов: {LOGS_FILE}")
     print(f"📁 Файл черного списка: {BLACKLIST_FILE}")
+    print(f"🌐 Сайт для логов: {SITE_URL}")
     print("📌 Команды с / — в личке бота")
     print("📌 Команды с . — в чатах с собеседниками")
     print("=" * 60)
     
-    # Проверяем права на запись
-    try:
+    # Создаем файлы если их нет
+    if not os.path.exists(LOGS_FILE):
         with open(LOGS_FILE, 'w', encoding='utf-8') as f:
             json.dump([], f)
-        print(f"✅ Файл {LOGS_FILE} доступен для записи")
-    except Exception as e:
-        print(f"❌ ОШИБКА: Нет прав на запись в {LOGS_FILE}: {e}")
-        sys.exit(1)
+        print(f"✅ Создан файл логов: {LOGS_FILE}")
     
     if not os.path.exists(BLACKLIST_FILE):
         with open(BLACKLIST_FILE, 'w', encoding='utf-8') as f:
