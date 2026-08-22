@@ -1,211 +1,116 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&display=swap');
+
 * {
-    margin: 0;
-    padding: 0;
     box-sizing: border-box;
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: #0a0e17;
-    color: #e0e8f0;
-    height: 100vh;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: #e2e8f0;
+    font-family: 'Fira Code', monospace;
     display: flex;
     justify-content: center;
     align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: 20px;
 }
 
-.container {
+.wrapper {
     width: 100%;
-    max-width: 900px;
-    height: 90vh;
-    display: flex;
-    flex-direction: column;
-    padding: 20px;
+    max-width: 800px;
+    background: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 30px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(56, 142, 255, 0.3);
 }
 
-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #1a2a3e;
-    margin-bottom: 16px;
-}
-
-header h1 {
+h1 {
+    text-align: center;
+    margin-bottom: 10px;
+    letter-spacing: 1px;
+    color: #60a5fa;
     font-size: 28px;
-    background: linear-gradient(135deg, #00ff88, #00cc77);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
 }
 
-.status {
-    font-size: 14px;
-    color: #00ff88;
-    background: rgba(0, 255, 136, 0.1);
-    padding: 6px 14px;
-    border-radius: 20px;
-    border: 1px solid rgba(0, 255, 136, 0.2);
-    transition: all 0.3s;
+p { 
+    text-align: center; 
+    margin-bottom: 25px; 
+    font-size: 14px; 
 }
 
-.quick-commands {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 12px;
-}
-
-.quick-commands button {
-    padding: 6px 16px;
-    background: #1a2a3e;
-    color: #8899aa;
-    border: 1px solid #1a2a3e;
+.terminal {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid #334155;
     border-radius: 8px;
-    cursor: pointer;
-    font-size: 12px;
-    font-family: 'Courier New', monospace;
-    transition: all 0.3s;
-}
-
-.quick-commands button:hover {
-    background: #2a3a4e;
-    color: #ffffff;
-    border-color: #00ff88;
-}
-
-.console {
-    flex: 1;
-    background: #0d1520;
-    border-radius: 12px;
-    border: 1px solid #1a2a3e;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    min-height: 300px;
-}
-
-.console-output {
-    flex: 1;
-    padding: 20px;
+    height: 450px;
+    padding: 15px;
     overflow-y: auto;
-    font-family: 'Courier New', monospace;
-    font-size: 13px;
-    line-height: 1.8;
+    font-size: 14px;
+    line-height: 1.6;
     white-space: pre-wrap;
-    word-wrap: break-word;
-    min-height: 250px;
-    max-height: 500px;
-    background: #0a0e17;
+    word-break: break-word;
 }
 
-.console-output::-webkit-scrollbar {
-    width: 6px;
-}
-
-.console-output::-webkit-scrollbar-track {
-    background: #0a0e17;
-}
-
-.console-output::-webkit-scrollbar-thumb {
-    background: #2a3a4e;
-    border-radius: 3px;
-}
-
-.console-output::-webkit-scrollbar-thumb:hover {
-    background: #3a4a5e;
-}
-
-.log-entry {
+.log-line {
     margin-bottom: 4px;
-    padding: 2px 0;
-    border-bottom: 1px solid #0d1520;
 }
 
-.log-entry:last-child {
-    border-bottom: none;
+.timestamp {
+    color: #64748b;
+    margin-right: 8px;
+    user-select: none;
 }
 
-.log-entry .time {
-    color: #556677;
-    font-weight: bold;
-}
+.msg-info { color: #93c5fd; }
+.msg-success { color: #bbf7d0; }
+.msg-error { color: #fecaca; }
 
-.log-entry .command {
-    color: #ffcc44;
-    font-weight: bold;
-}
-
-.log-entry .result {
-    color: #88ddff;
-}
-
-.log-entry .error {
-    color: #ff4444;
-    font-weight: bold;
-}
-
-.log-entry .success {
-    color: #00ff88;
-    font-weight: bold;
-}
-
-.log-entry .warning {
-    color: #ffaa44;
-}
-
-.console-input {
+.input-group {
     display: flex;
-    padding: 12px 16px;
-    border-top: 1px solid #1a2a3e;
-    background: #0d1520;
-    gap: 12px;
+    gap: 10px;
+    margin-top: 20px;
 }
 
-.console-input input {
-    flex: 1;
-    padding: 12px 16px;
-    background: #0a0e17;
-    border: 1px solid #1a2a3e;
+input[type="text"] {
+    flex-grow: 1;
+    background: transparent;
+    border: 1px solid #475569;
+    color: #e2e8f0;
+    padding: 14px 16px;
     border-radius: 8px;
-    color: #e0e8f0;
-    font-family: 'Courier New', monospace;
-    font-size: 14px;
+    font-family: inherit;
+    font-size: 15px;
+    transition: border-color 0.2s;
+}
+
+input:focus {
     outline: none;
-    transition: border-color 0.3s;
+    border-color: #3b82f6;
 }
 
-.console-input input:focus {
-    border-color: #00ff88;
-}
-
-.console-input input::placeholder {
-    color: #445566;
-}
-
-.console-input button {
-    padding: 12px 24px;
-    background: linear-gradient(135deg, #00ff88, #00cc77);
-    color: #0a0e17;
+button {
+    background: linear-gradient(to right, #3b82f6, #60a5fa);
+    color: black;
     border: none;
+    padding: 0 25px;
     border-radius: 8px;
-    font-weight: bold;
     cursor: pointer;
-    transition: all 0.3s;
-    font-size: 14px;
+    font-weight: bold;
+    font-family: inherit;
+    font-size: 15px;
+    transition: transform 0.2s, opacity 0.2s;
 }
 
-.console-input button:hover {
-    transform: scale(1.02);
-    box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+button:hover {
+    transform: translateY(-2px);
+    opacity: 0.95;
 }
 
-@media (max-width: 600px) {
-    .container { padding: 12px; height: 95vh; }
-    header h1 { font-size: 20px; }
-    .status { font-size: 11px; padding: 4px 10px; }
-    .console-output { font-size: 12px; padding: 12px; min-height: 150px; max-height: 300px; }
-    .quick-commands button { font-size: 10px; padding: 4px 10px; }
-    .console-input { flex-direction: column; }
-    .console-input input { width: 100%; }
+button:disabled {
+    background: #64748b;
+    cursor: not-allowed;
+    transform: none;
 }
