@@ -12,7 +12,8 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BusinessConnection
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types.business_connection import BusinessConnection
 from aiogram import F
 
 logging.basicConfig(level=logging.INFO)
