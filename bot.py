@@ -22,10 +22,6 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MAIN_ADMIN = 8308522569
 
-# ===== НАСТРОЙКИ ДЛЯ САЙТА =====
-SITE_URL = os.getenv("SITE_URL", "https://ваш-сайт.ru")  # Замените на ваш URL
-SITE_API_KEY = os.getenv("SITE_API_KEY", "")  # API ключ если нужен
-
 if not BOT_TOKEN:
     print("❌ Токен не найден!")
     sys.exit(1)
@@ -41,6 +37,9 @@ blocked_notified = {}
 
 def get_msk_time():
     return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
+
+def get_msk_time_minus_days(days):
+    return (datetime.utcnow() + timedelta(hours=3) - timedelta(days=days)).strftime('%d.%m.%Y %H:%M:%S')
 
 # ========== ЧЕРНЫЙ СПИСОК ==========
 def load_blacklist():
@@ -127,38 +126,9 @@ def get_blacklist_reason(user_id):
 def is_admin(user_id):
     return user_id == MAIN_ADMIN
 
-# ========== ЛОГИ (В ФАЙЛ И НА САЙТ) ==========
-def send_log_to_site(log_entry):
-    """Отправляет лог на сайт через API"""
+# ========== ЛОГИ ==========
+def save_log(log_entry):
     try:
-        if not SITE_URL or SITE_URL == "https://ваш-сайт.ru":
-            print("⚠️ SITE_URL не настроен, пропускаем отправку на сайт")
-            return False
-        
-        url = f"{SITE_URL}/api/logs"
-        headers = {
-            "Content-Type": "application/json",
-            "X-API-Key": SITE_API_KEY if SITE_API_KEY else ""
-        }
-        
-        response = requests.post(url, json=log_entry, headers=headers, timeout=5)
-        
-        if response.status_code == 200 or response.status_code == 201:
-            print(f"✅ Лог отправлен на сайт: {log_entry.get('command', 'unknown')}")
-            return True
-        else:
-            print(f"⚠️ Ошибка отправки на сайт: {response.status_code} - {response.text}")
-            return False
-    except Exception as e:
-        print(f"❌ Ошибка отправки на сайт: {e}")
-        return False
-
-def save_log_local(log_entry):
-    """Сохраняет лог в локальный файл"""
-    try:
-        # Создаем папку если нужно
-        os.makedirs(os.path.dirname(LOGS_FILE) if os.path.dirname(LOGS_FILE) else '.', exist_ok=True)
-        
         logs = []
         if os.path.exists(LOGS_FILE):
             try:
@@ -176,35 +146,79 @@ def save_log_local(log_entry):
         with open(LOGS_FILE, 'w', encoding='utf-8') as f:
             json.dump(logs, f, indent=2, ensure_ascii=False)
         
-        print(f"✅ Лог сохранен в файл: {log_entry.get('command', 'unknown')}")
         return True
     except Exception as e:
-        print(f"❌ Ошибка сохранения в файл: {e}")
+        print(f"❌ Ошибка сохранения лога: {e}")
         return False
 
-def save_log(log_entry):
-    """Главная функция сохранения лога - в файл и на сайт"""
-    print(f"📝 СОХРАНЯЮ ЛОГ: {log_entry}")
-    
-    # Добавляем время если нет
-    if 'time' not in log_entry:
-        log_entry['time'] = get_msk_time()
-    
-    # 1. Сохраняем в файл
-    local_success = save_log_local(log_entry)
-    
-    # 2. Отправляем на сайт
-    site_success = send_log_to_site(log_entry)
-    
-    # 3. Выводим результат
-    if local_success and site_success:
-        print(f"✅ Лог сохранен везде")
-    elif local_success:
-        print(f"⚠️ Лог сохранен только в файл (сайт недоступен)")
-    else:
-        print(f"❌ Ошибка сохранения лога")
-    
-    return local_success or site_success
+def get_logs_for_user(identifier):
+    """Получает логи для конкретного пользователя по ID или username"""
+    try:
+        if not os.path.exists(LOGS_FILE):
+            return []
+        
+        with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+            all_logs = json.load(f)
+        
+        # Определяем тип поиска
+        is_id = identifier.isdigit()
+        
+        # Фильтруем логи за последние 5 дней
+        five_days_ago = (datetime.utcnow() + timedelta(hours=3) - timedelta(days=5))
+        
+        filtered_logs = []
+        for log in all_logs:
+            # Проверяем дату
+            log_time_str = log.get('time', '')
+            if log_time_str:
+                try:
+                    # Парсим время в формате DD.MM.YYYY HH:MM:SS
+                    log_time = datetime.strptime(log_time_str, '%d.%m.%Y %H:%M:%S')
+                    if log_time < five_days_ago:
+                        continue
+                except:
+                    pass
+            
+            # Проверяем ID или username
+            if is_id:
+                if str(log.get('user_id', '')) == identifier:
+                    filtered_logs.append(log)
+            else:
+                # Поиск по username (без @)
+                username = log.get('username', '').lower()
+                identifier_clean = identifier.lower().replace('@', '')
+                if identifier_clean in username:
+                    filtered_logs.append(log)
+        
+        return filtered_logs
+    except Exception as e:
+        print(f"❌ Ошибка получения логов: {e}")
+        return []
+
+def get_all_users():
+    """Получает список всех уникальных пользователей из логов"""
+    try:
+        if not os.path.exists(LOGS_FILE):
+            return []
+        
+        with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+            all_logs = json.load(f)
+        
+        users = {}
+        for log in all_logs:
+            user_id = log.get('user_id')
+            username = log.get('username', 'Нет')
+            full_name = log.get('full_name', 'Нет')
+            if user_id:
+                users[str(user_id)] = {
+                    'username': username,
+                    'full_name': full_name
+                }
+        
+        return users
+    except Exception as e:
+        print(f"❌ Ошибка получения списка пользователей: {e}")
+        return {}
 
 # ========== УДАЛЕНИЕ В БИЗНЕС-ЧАТЕ ==========
 async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
@@ -540,6 +554,87 @@ async def handle_business_message(message: types.Message):
         
         text = message.text.strip()
         
+        # ===== АДМИН-КОМАНДЫ В БИЗНЕС-ЧАТЕ =====
+        if text.lower().startswith('.idlist') or text.lower() == '.idlist':
+            if not is_admin(user_id):
+                await send_to_business_chat(chat_id, "❌ У вас нет прав!", connection_id)
+                return
+            
+            await delete_business_message(chat_id, message_id, connection_id)
+            
+            users = get_all_users()
+            if not users:
+                await send_to_business_chat(chat_id, "📊 Нет пользователей в логах", connection_id)
+                return
+            
+            result = "👥 СПИСОК ПОЛЬЗОВАТЕЛЕЙ\n\n"
+            for uid, data in users.items():
+                username = data.get('username', 'Нет')
+                full_name = data.get('full_name', 'Нет')
+                result += f"🆔 {uid}\n"
+                if username != 'Нет':
+                    result += f"👤 @{username}\n"
+                if full_name != 'Нет':
+                    result += f"📛 {full_name}\n"
+                result += "─" * 20 + "\n"
+            
+            # Разбиваем на части если длинный
+            if len(result) > 4000:
+                parts = [result[i:i+4000] for i in range(0, len(result), 4000)]
+                for part in parts:
+                    await send_to_business_chat(chat_id, part, connection_id)
+            else:
+                await send_to_business_chat(chat_id, result, connection_id)
+            return
+        
+        if text.lower().startswith('.logs'):
+            if not is_admin(user_id):
+                await send_to_business_chat(chat_id, "❌ У вас нет прав!", connection_id)
+                return
+            
+            await delete_business_message(chat_id, message_id, connection_id)
+            
+            parts = text.split(maxsplit=1)
+            if len(parts) < 2:
+                await send_to_business_chat(chat_id, "❌ .logs [ID или @username]\nПример: .logs 8308522569 или .logs @SlNpidora", connection_id)
+                return
+            
+            identifier = parts[1].strip()
+            logs = get_logs_for_user(identifier)
+            
+            if not logs:
+                await send_to_business_chat(chat_id, f"❌ Логи не найдены для {identifier}", connection_id)
+                return
+            
+            # Считаем статистику
+            total_commands = len(logs)
+            probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
+            
+            result = f"📊 ЛОГИ ДЛЯ: {identifier}\n"
+            result += f"📝 Всего команд: {total_commands}\n"
+            result += f"🔍 Пробивов: {probes}\n"
+            result += f"🕐 За последние 5 дней\n\n"
+            result += "─" * 30 + "\n\n"
+            
+            # Показываем последние 50 команд
+            for log in logs[-50:]:
+                command = log.get('command', 'Неизвестно')
+                time = log.get('time', '')
+                result += f"🕐 {time}\n"
+                result += f"📝 {command}\n"
+                if log.get('target'):
+                    result += f"🎯 {log['target']}\n"
+                result += "─" * 20 + "\n"
+            
+            if len(result) > 4000:
+                parts = [result[i:i+4000] for i in range(0, len(result), 4000)]
+                for part in parts:
+                    await send_to_business_chat(chat_id, part, connection_id)
+            else:
+                await send_to_business_chat(chat_id, result, connection_id)
+            return
+        
+        # ===== ОБЫЧНЫЕ КОМАНДЫ =====
         if not text.startswith('.'):
             return
         
@@ -560,7 +655,9 @@ async def handle_business_message(message: types.Message):
                 ".stats\n\n"
                 "⚡ АДМИН\n"
                 ".ban [ID] [время] [причина]\n"
-                ".unban [ID] [причина]",
+                ".unban [ID] [причина]\n"
+                ".idlist - Список пользователей\n"
+                ".logs [ID/@username] - Логи пользователя",
                 connection_id
             )
             return
@@ -598,7 +695,7 @@ async def handle_business_message(message: types.Message):
                 with open(LOGS_FILE, 'r', encoding='utf-8') as f:
                     logs = json.load(f)
                 users = set(l.get('user_id') for l in logs)
-                probes = len([l for l in logs if l.get('type') == 'probe'])
+                probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
                 await send_to_business_chat(
                     chat_id,
                     f"📊 СТАТИСТИКА\n\n"
@@ -770,7 +867,9 @@ async def help_command(message: types.Message):
         "/whois ip [IP] - Пробив IP\n"
         "/whois number [НОМЕР] - Пробив номера\n"
         "/ban [ID] [время] [причина] - Бан (админ)\n"
-        "/unban [ID] [причина] - Разбан (админ)\n\n"
+        "/unban [ID] [причина] - Разбан (админ)\n"
+        "/idlist - Список пользователей (админ)\n"
+        "/logs [ID/@username] - Логи пользователя (админ)\n\n"
         "🔹 В ЧАТАХ (с .):\n"
         ".help - Справка\n"
         ".ping - Проверка\n"
@@ -780,7 +879,9 @@ async def help_command(message: types.Message):
         ".whois ip [IP] - Пробив IP\n"
         ".whois number [НОМЕР] - Пробив номера\n"
         ".ban [ID] [время] [причина] - Бан (админ)\n"
-        ".unban [ID] [причина] - Разбан (админ)"
+        ".unban [ID] [причина] - Разбан (админ)\n"
+        ".idlist - Список пользователей (админ)\n"
+        ".logs [ID/@username] - Логи пользователя (админ)"
     )
 
 @dp.message(Command("ping"))
@@ -836,7 +937,7 @@ async def stats_command(message: types.Message):
         with open(LOGS_FILE, 'r', encoding='utf-8') as f:
             logs = json.load(f)
         users = set(l.get('user_id') for l in logs)
-        probes = len([l for l in logs if l.get('type') == 'probe'])
+        probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
         await message.answer(
             f"📊 СТАТИСТИКА\n\n"
             f"👤 Пользователей: {len(users)}\n"
@@ -846,6 +947,84 @@ async def stats_command(message: types.Message):
         )
     except:
         await message.answer("📊 Статистика временно недоступна")
+
+@dp.message(Command("idlist"))
+async def idlist_command(message: types.Message):
+    user_id = message.from_user.id
+    
+    if not is_admin(user_id):
+        await message.answer("❌ У вас нет прав на эту команду!")
+        return
+    
+    users = get_all_users()
+    if not users:
+        await message.answer("📊 Нет пользователей в логах")
+        return
+    
+    result = "👥 СПИСОК ПОЛЬЗОВАТЕЛЕЙ\n\n"
+    for uid, data in users.items():
+        username = data.get('username', 'Нет')
+        full_name = data.get('full_name', 'Нет')
+        result += f"🆔 {uid}\n"
+        if username != 'Нет':
+            result += f"👤 @{username}\n"
+        if full_name != 'Нет':
+            result += f"📛 {full_name}\n"
+        result += "─" * 20 + "\n"
+    
+    if len(result) > 4000:
+        parts = [result[i:i+4000] for i in range(0, len(result), 4000)]
+        for part in parts:
+            await message.answer(part)
+    else:
+        await message.answer(result)
+
+@dp.message(Command("logs"))
+async def logs_command(message: types.Message):
+    user_id = message.from_user.id
+    
+    if not is_admin(user_id):
+        await message.answer("❌ У вас нет прав на эту команду!")
+        return
+    
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        await message.answer("❌ /logs [ID или @username]\nПример: /logs 8308522569 или /logs @SlNpidora")
+        return
+    
+    identifier = args[1].strip()
+    logs = get_logs_for_user(identifier)
+    
+    if not logs:
+        await message.answer(f"❌ Логи не найдены для {identifier}")
+        return
+    
+    # Считаем статистику
+    total_commands = len(logs)
+    probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
+    
+    result = f"📊 ЛОГИ ДЛЯ: {identifier}\n"
+    result += f"📝 Всего команд: {total_commands}\n"
+    result += f"🔍 Пробивов: {probes}\n"
+    result += f"🕐 За последние 5 дней\n\n"
+    result += "─" * 30 + "\n\n"
+    
+    # Показываем последние 50 команд
+    for log in logs[-50:]:
+        command = log.get('command', 'Неизвестно')
+        time = log.get('time', '')
+        result += f"🕐 {time}\n"
+        result += f"📝 {command}\n"
+        if log.get('target'):
+            result += f"🎯 {log['target']}\n"
+        result += "─" * 20 + "\n"
+    
+    if len(result) > 4000:
+        parts = [result[i:i+4000] for i in range(0, len(result), 4000)]
+        for part in parts:
+            await message.answer(part)
+    else:
+        await message.answer(result)
 
 @dp.message(Command("whois"))
 async def whois_command(message: types.Message):
@@ -1091,12 +1270,10 @@ async def main():
     print(f"👤 АДМИН: {MAIN_ADMIN}")
     print(f"📁 Файл логов: {LOGS_FILE}")
     print(f"📁 Файл черного списка: {BLACKLIST_FILE}")
-    print(f"🌐 Сайт для логов: {SITE_URL}")
     print("📌 Команды с / — в личке бота")
     print("📌 Команды с . — в чатах с собеседниками")
     print("=" * 60)
     
-    # Создаем файлы если их нет
     if not os.path.exists(LOGS_FILE):
         with open(LOGS_FILE, 'w', encoding='utf-8') as f:
             json.dump([], f)
