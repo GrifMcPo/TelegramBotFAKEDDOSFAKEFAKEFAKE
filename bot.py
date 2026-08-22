@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from supabase import create_client, Client
 
 logging.basicConfig(level=logging.INFO)
@@ -23,15 +22,11 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 MAIN_ADMIN = 8308522569
 
 # ===== SUPABASE =====
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+SUPABASE_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
 
-if not BOT_TOKEN:
-    print("❌ Токен не найден!")
-    sys.exit(1)
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("❌ SUPABASE_URL или SUPABASE_KEY не найдены!")
+if not BOT_TOKEN or not SUPABASE_URL or not SUPABASE_KEY:
+    print("❌ Ошибка: не хватает переменных окружения!")
     sys.exit(1)
 
 bot = Bot(token=BOT_TOKEN)
@@ -40,7 +35,6 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 LOGS_FILE = "docs/data/logs.json"
 BLACKLIST_FILE = "docs/data/blacklist.json"
-
 blocked_notified = {}
 
 def get_msk_time():
@@ -353,9 +347,11 @@ def execute_command(command):
 
 # ========== ОБРАБОТЧИК КОМАНД ИЗ SUPABASE ==========
 async def process_commands():
+    """Читает команды из таблицы commands, выполняет, пишет в responses"""
     while True:
         try:
-            response = supabase.table('rcon_commands').select('*').eq('status', 'waiting').order('id').limit(1).execute()
+            # Ищем команду без response_id (еще не обработанную)
+            response = supabase.table('commands').select('*').is_('response_id', 'null').order('id').limit(1).execute()
             
             if response.data and len(response.data) > 0:
                 cmd = response.data[0]
@@ -364,15 +360,24 @@ async def process_commands():
                 
                 print(f"📥 Получена команда: {command} (ID: {command_id})")
                 
+                # Выполняем команду
                 result = execute_command(command)
                 
-                supabase.table('rcon_commands').update({
+                # Создаем запись в responses
+                resp_data = {
                     'result': result,
-                    'status': 'done',
-                    'updated_at': datetime.now().isoformat()
-                }).eq('id', command_id).execute()
+                    'time': get_msk_time(),
+                    'response_id': command_id
+                }
+                resp_result = supabase.table('responses').insert(resp_data).execute()
                 
-                print(f"✅ Ответ сохранен в Supabase")
+                if resp_result.data:
+                    response_id = resp_result.data[0]['id']
+                    # Обновляем команду, ставим response_id
+                    supabase.table('commands').update({
+                        'response_id': response_id
+                    }).eq('id', command_id).execute()
+                    print(f"✅ Ответ сохранен в responses (ID: {response_id})")
             
         except Exception as e:
             print(f"❌ Ошибка: {e}")
@@ -390,7 +395,7 @@ async def help_command(message: types.Message):
 
 @dp.message()
 async def handle_message(message: types.Message):
-    await message.answer("📱 Используй сайт: https://grifmcpo.github.io/TelegramBotFAKEDDOSFAKEFAKEFAKE/")
+    await message.answer("📱 Используй сайт")
 
 # ========== ЗАПУСК ==========
 async def main():
