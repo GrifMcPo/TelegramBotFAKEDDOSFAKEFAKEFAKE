@@ -1,107 +1,149 @@
-// ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ =====
-let isLoggedIn = false;
+// ===== КОНФИГ =====
+const GITHUB_RAW = 'https://raw.githubusercontent.comGrifMcPo/TelegramBotFAKEDDOS/main';
+const GITHUB_API = 'https://api.github.com/repos/GrifMcPo/TelegramBotFAKEDDOS/contents';
 
-// ===== ПРОВЕРКА АВТОРИЗАЦИИ =====
-function checkAuth() {
-    fetch('/api/stats')
-        .then(res => {
-            if (res.status === 401) {
-                document.getElementById('loginScreen').style.display = 'flex';
-                document.getElementById('mainApp').style.display = 'none';
-                isLoggedIn = false;
-            } else {
-                document.getElementById('loginScreen').style.display = 'none';
-                document.getElementById('mainApp').style.display = 'flex';
-                isLoggedIn = true;
-                updateStatus();
-                updateTime();
-            }
-        })
-        .catch(() => {
-            // Если сервер недоступен - показываем логин
-            document.getElementById('loginScreen').style.display = 'flex';
-            document.getElementById('mainApp').style.display = 'none';
-        });
-}
-
-// ===== ЛОГИН =====
-function login() {
-    const password = document.getElementById('passwordInput').value;
-    const errorEl = document.getElementById('loginError');
-    
-    if (!password) {
-        errorEl.textContent = '❌ Введите пароль';
-        return;
-    }
-    
-    fetch('/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: password })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.status === 'success') {
-            errorEl.textContent = '';
-            document.getElementById('loginScreen').style.display = 'none';
-            document.getElementById('mainApp').style.display = 'flex';
-            isLoggedIn = true;
-            updateStatus();
-            updateTime();
-            addLog('✅ Авторизация успешна', 'success');
-        } else {
-            errorEl.textContent = '❌ ' + data.message;
-        }
-    })
-    .catch(() => {
-        errorEl.textContent = '❌ Ошибка соединения с сервером';
-    });
-}
-
-// ===== ВЫХОД =====
-function logout() {
-    fetch('/logout')
-        .then(() => {
-            document.getElementById('loginScreen').style.display = 'flex';
-            document.getElementById('mainApp').style.display = 'none';
-            isLoggedIn = false;
-        });
-}
+// ===== ПЕРЕМЕННЫЕ =====
+let commandId = 0;
+let isWaitingResponse = false;
 
 // ===== ДОБАВЛЕНИЕ В КОНСОЛЬ =====
 function addLog(text, type = 'result') {
     const output = document.getElementById('consoleOutput');
     const time = new Date().toLocaleTimeString('ru-RU');
     const typeClass = type || 'result';
+    const safeText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     
-    output.innerHTML += `<div class="log-entry"><span class="time">[${time}]</span> <span class="${typeClass}">${text.replace(/\n/g, '<br>')}</span></div>`;
+    output.innerHTML += `<div class="log-entry"><span class="time">[${time}]</span> <span class="${typeClass}">${safeText.replace(/\n/g, '<br>')}</span></div>`;
     output.scrollTop = output.scrollHeight;
 }
 
-// ===== ОТПРАВКА КОМАНДЫ =====
-function sendCommand(command) {
-    if (!command || !isLoggedIn) return;
+// ===== ОТПРАВКА КОМАНДЫ ЧЕРЕЗ ФАЙЛ =====
+async function sendCommand(command) {
+    if (!command || isWaitingResponse) return;
     
-    const time = new Date().toLocaleTimeString('ru-RU');
+    commandId++;
+    const currentId = commandId;
+    isWaitingResponse = true;
+    
     addLog(`$ ${command}`, 'command');
+    addLog('⏳ Отправка команды...', 'warning');
     
-    fetch('/api/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: command })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.status === 'success') {
-            addLog(data.result, 'result');
-        } else {
-            addLog(`❌ ${data.message || 'Ошибка'}`, 'error');
+    try {
+        // 1. Пишем команду в commands.json
+        const commandData = {
+            id: currentId,
+            command: command
+        };
+        
+        // Получаем текущий файл
+        const fileRes = await fetch(`${GITHUB_API}/commands.json`, {
+            headers: { 'Accept': 'application/vnd.github.v3+json' }
+        });
+        
+        let sha = null;
+        let currentContent = '';
+        if (fileRes.ok) {
+            const fileData = await fileRes.json();
+            sha = fileData.sha;
+            if (fileData.content) {
+                try {
+                    const decoded = atob(fileData.content);
+                    currentContent = decoded;
+                } catch(e) {}
+            }
         }
-        updateStatus();
-    })
-    .catch(err => {
-        addLog(`❌ Ошибка соединения: ${err.message}`, 'error');
-    });
+        
+        // Обновляем файл
+        const updateRes = await fetch(`${GITHUB_API}/commands.json`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: `RCON command: ${command}`,
+                content: btoa(unescape(encodeURIComponent(JSON.stringify(commandData, null, 2)))),
+                sha: sha
+            })
+        });
+        
+        if (!updateRes.ok) {
+            throw new Error('Failed to write command');
+        }
+        
+        // 2. Ждем ответ
+        let attempts = 0;
+        let response = null;
+        let lastLogs = [];
+        
+        while (attempts < 30) {
+            await new Promise(r => setTimeout(r, 2000));
+            
+            // Проверяем response.json
+            const respRes = await fetch(`${GITHUB_RAW}/response.json`);
+            if (respRes.ok) {
+                const data = await respRes.json();
+                if (data.id === currentId && data.status === 'done') {
+                    response = data;
+                    break;
+                }
+            }
+            
+            // Проверяем логи на наличие новой записи
+            if (attempts % 3 === 0) {
+                const logRes = await fetch(`${GITHUB_RAW}/logs.json`);
+                if (logRes.ok) {
+                    const logs = await logRes.json();
+                    if (logs.length > lastLogs.length) {
+                        const newLogs = logs.slice(lastLogs.length);
+                        for (const log of newLogs) {
+                            if (log.command === command) {
+                                response = {
+                                    result: `✅ Команда выполнена (логи обновлены)`,
+                                    time: log.time || new Date().toISOString()
+                                };
+                                break;
+                            }
+                        }
+                        lastLogs = logs;
+                    }
+                }
+            }
+            attempts++;
+        }
+        
+        // Убираем "Отправка..."
+        const output = document.getElementById('consoleOutput');
+        const entries = output.querySelectorAll('.log-entry');
+        for (const entry of entries) {
+            if (entry.textContent.includes('⏳ Отправка команды...')) {
+                entry.remove();
+                break;
+            }
+        }
+        
+        if (response) {
+            addLog(`📥 ${response.result}`, 'result');
+            updateStatus();
+            document.getElementById('lastCommand').textContent = `⏳ Последняя: ${command}`;
+        } else {
+            addLog('❌ Таймаут: бот не ответил (проверьте logs.json)', 'error');
+        }
+        
+    } catch (err) {
+        const output = document.getElementById('consoleOutput');
+        const entries = output.querySelectorAll('.log-entry');
+        for (const entry of entries) {
+            if (entry.textContent.includes('⏳ Отправка команды...')) {
+                entry.remove();
+                break;
+            }
+        }
+        addLog(`❌ Ошибка: ${err.message}`, 'error');
+        addLog('💡 Проверьте: бот запущен в GitHub Actions?', 'warning');
+    }
+    
+    isWaitingResponse = false;
 }
 
 function sendCommandFromInput() {
@@ -115,30 +157,41 @@ function sendCommandFromInput() {
 
 // ===== ОБНОВЛЕНИЕ СТАТУСА =====
 function updateStatus() {
-    if (!isLoggedIn) return;
-    
-    fetch('/api/stats')
-        .then(res => res.json())
+    fetch(`${GITHUB_RAW}/logs.json`)
+        .then(res => {
+            if (!res.ok) throw new Error('No logs');
+            return res.json();
+        })
         .then(data => {
-            if (data.status === 'success') {
-                document.getElementById('statsUsers').textContent = `👤 Пользователей: ${data.users}`;
-                document.getElementById('statsCommands').textContent = `📝 Команд: ${data.commands}`;
-                document.getElementById('statsProbes').textContent = `🔍 Пробивов: ${data.probes}`;
+            if (data && data.length > 0) {
+                const users = new Set(data.map(l => l.user_id));
+                const probes = data.filter(l => l.command && l.command.includes('whois'));
+                document.getElementById('statsUsers').textContent = `👤 Пользователей: ${users.size}`;
+                document.getElementById('statsCommands').textContent = `📝 Команд: ${data.length}`;
+                document.getElementById('statsProbes').textContent = `🔍 Пробивов: ${probes.length}`;
+                document.getElementById('botStatus').innerHTML = `
+                    <span class="status-dot online"></span>
+                    <span>Бот активен (${data.length} команд)</span>
+                `;
             }
         })
-        .catch(() => {});
+        .catch(() => {
+            document.getElementById('statsUsers').textContent = '👤 Пользователей: -';
+            document.getElementById('statsCommands').textContent = '📝 Команд: -';
+            document.getElementById('statsProbes').textContent = '🔍 Пробивов: -';
+            document.getElementById('botStatus').innerHTML = `
+                <span class="status-dot offline"></span>
+                <span>Бот офлайн</span>
+            `;
+        });
 }
 
 // ===== ОБНОВЛЕНИЕ ВРЕМЕНИ =====
 function updateTime() {
     const now = new Date();
     const str = now.toLocaleString('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
     });
     document.getElementById('currentTime').textContent = '🕐 ' + str;
 }
@@ -146,55 +199,65 @@ function updateTime() {
 // ===== ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ =====
 function loadUsers() {
     sendCommand('/idlist');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelector('[data-page="users"]')?.classList.add('active');
+    document.getElementById('pageTitle').textContent = '👥 Пользователи';
 }
 
-// ===== ЗАГРУЗКА СТАТИСТИКИ =====
 function loadStats() {
     sendCommand('/stats');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelector('[data-page="stats"]')?.classList.add('active');
+    document.getElementById('pageTitle').textContent = '📊 Статистика';
 }
 
-// ===== ЗАГРУЗКА ЧЕРНОГО СПИСКА =====
 function loadBlacklist() {
-    if (!isLoggedIn) return;
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelector('[data-page="blacklist"]')?.classList.add('active');
+    document.getElementById('pageTitle').textContent = '⛔ Черный список';
     
-    fetch('/api/blacklist')
-        .then(res => res.json())
+    fetch(`${GITHUB_RAW}/blacklist.json`)
+        .then(res => {
+            if (!res.ok) throw new Error('Blacklist unavailable');
+            return res.json();
+        })
         .then(data => {
-            if (data.status === 'success') {
-                let result = '⛔ ЧЕРНЫЙ СПИСОК\n\n';
-                if (data.count === 0) {
-                    result += '📭 Черный список пуст';
-                } else {
-                    for (const [uid, info] of Object.entries(data.blacklist)) {
-                        result += `🆔 ${uid}\n`;
-                        result += `📌 Причина: ${info.reason || 'Не указана'}\n`;
-                        result += `👤 Добавил: ${info.added_by || 'Неизвестно'}\n`;
-                        result += `🕐 Время: ${info.added_at || 'Неизвестно'}\n`;
-                        if (info.expires_at) {
-                            result += `⏱ Истекает: ${info.expires_at}\n`;
-                        }
-                        result += '─' * 20 + '\n';
-                    }
-                }
-                addLog(result, 'result');
+            let result = '⛔ ЧЕРНЫЙ СПИСОК\n\n';
+            if (Object.keys(data).length === 0) {
+                result += '📭 Черный список пуст';
             } else {
-                addLog(`❌ ${data.message || 'Ошибка загрузки черного списка'}`, 'error');
+                for (const [uid, info] of Object.entries(data)) {
+                    result += `🆔 ID: ${uid}\n`;
+                    result += `📌 Причина: ${info.reason || 'Не указана'}\n`;
+                    result += `👤 Добавил: ${info.added_by || 'Неизвестно'}\n`;
+                    result += `🕐 Время: ${info.added_at || 'Неизвестно'}\n`;
+                    if (info.expires_at) {
+                        result += `⏱ Истекает: ${info.expires_at}\n`;
+                    }
+                    result += '─'.repeat(20) + '\n';
+                }
             }
+            addLog(result, 'result');
         })
         .catch(err => {
             addLog(`❌ Ошибка: ${err.message}`, 'error');
         });
 }
 
-// ===== ПОИСК ЛОГОВ =====
+function showConsole() {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelector('[data-page="console"]')?.classList.add('active');
+    document.getElementById('pageTitle').textContent = '💻 RCON Консоль';
+    document.getElementById('logsPanel').style.display = 'none';
+}
+
 function showLogsPanel() {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelector('[data-page="logs"]')?.classList.add('active');
+    document.getElementById('pageTitle').textContent = '📝 Логи';
     const panel = document.getElementById('logsPanel');
-    if (panel.style.display === 'none') {
-        panel.style.display = 'block';
-        document.getElementById('logsResult').innerHTML = '';
-    } else {
-        panel.style.display = 'none';
-    }
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    document.getElementById('logsResult').innerHTML = '';
 }
 
 function searchLogs() {
@@ -204,63 +267,57 @@ function searchLogs() {
         return;
     }
     
-    fetch(`/api/logs/${encodeURIComponent(query)}`)
-        .then(res => res.json())
+    document.getElementById('logsResult').innerHTML = '⏳ Загрузка...';
+    
+    fetch(`${GITHUB_RAW}/logs.json`)
+        .then(res => {
+            if (!res.ok) throw new Error('Logs unavailable');
+            return res.json();
+        })
         .then(data => {
             const resultEl = document.getElementById('logsResult');
-            if (data.status === 'success') {
-                if (data.count === 0) {
-                    resultEl.innerHTML = `❌ Логи не найдены для ${data.identifier}`;
-                    return;
-                }
-                let html = `📊 ЛОГИ ДЛЯ: ${data.identifier}\n`;
-                html += `📝 Всего команд: ${data.count}\n`;
-                html += `🕐 За последние 5 дней\n\n`;
-                html += '─'.repeat(30) + '\n\n';
-                
-                data.logs.slice(-50).forEach(log => {
-                    html += `🕐 ${log.time || 'Нет времени'}\n`;
-                    html += `📝 ${log.command || 'Неизвестно'}\n`;
-                    if (log.target) html += `🎯 ${log.target}\n`;
-                    html += '─'.repeat(20) + '\n';
-                });
-                
-                resultEl.innerHTML = html.replace(/\n/g, '<br>');
-            } else {
-                resultEl.innerHTML = `❌ ${data.message || 'Ошибка'}`;
+            if (!data || data.length === 0) {
+                resultEl.innerHTML = '❌ Логи не найдены';
+                return;
             }
+            
+            const filtered = data.filter(log => {
+                const idMatch = log.user_id && String(log.user_id) === query;
+                const nameMatch = log.username && log.username.toLowerCase().includes(query.toLowerCase().replace('@', ''));
+                return idMatch || nameMatch;
+            });
+            
+            if (filtered.length === 0) {
+                resultEl.innerHTML = `❌ Логи не найдены для ${query}`;
+                return;
+            }
+            
+            let html = `📊 ЛОГИ ДЛЯ: ${query}\n`;
+            html += `📝 Всего команд: ${filtered.length}\n`;
+            html += `🕐 За последние 5 дней\n\n`;
+            html += '─'.repeat(30) + '\n\n';
+            
+            filtered.slice(-50).forEach(log => {
+                html += `🕐 ${log.time || 'Нет времени'}\n`;
+                html += `📝 ${log.command || 'Неизвестно'}\n`;
+                if (log.target) html += `🎯 ${log.target}\n`;
+                html += '─'.repeat(20) + '\n';
+            });
+            
+            resultEl.innerHTML = html.replace(/\n/g, '<br>');
         })
         .catch(err => {
             document.getElementById('logsResult').innerHTML = `❌ Ошибка: ${err.message}`;
         });
 }
 
-// ===== НАВИГАЦИЯ =====
-document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', function(e) {
-        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-        this.classList.add('active');
-        
-        const page = this.dataset.page;
-        const titles = {
-            'console': '💻 RCON Консоль',
-            'users': '👥 Пользователи',
-            'stats': '📊 Статистика',
-            'blacklist': '⛔ Черный список',
-            'logs': '📝 Логи'
-        };
-        document.getElementById('pageTitle').textContent = titles[page] || 'RCON';
-    });
-});
-
 // ===== ИНИЦИАЛИЗАЦИЯ =====
-// Проверяем авторизацию при загрузке
 document.addEventListener('DOMContentLoaded', function() {
-    checkAuth();
+    updateTime();
     setInterval(updateTime, 1000);
+    updateStatus();
     setInterval(updateStatus, 30000);
     
-    // Если нажали Enter в поле ввода
     document.getElementById('commandInput').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -268,14 +325,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Автоматический вход по Enter на странице логина
-    document.getElementById('passwordInput').addEventListener('keydown', function(e) {
+    document.getElementById('logsSearch').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
-            login();
+            searchLogs();
         }
     });
+    
+    console.log('🚀 RCON Client loaded');
+    console.log(`📁 GitHub RAW: ${GITHUB_RAW}`);
 });
-
-// Если страница загружена, проверяем авторизацию
-console.log('🚀 RCON Client loaded');
