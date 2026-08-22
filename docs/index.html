@@ -38,6 +38,10 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script>
+        // АВТО-ВЕРСИЯ СКРИПТА - КЭШ НЕ БУДЕТ МЕШАТЬ!
+        const scriptVersion = Date.now();
+        document.write('<script src="script.js?v=' + scriptVersion + '"><\/script>');
+    </script>
 </body>
 </html>
