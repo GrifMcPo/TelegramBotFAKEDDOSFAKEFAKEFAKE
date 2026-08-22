@@ -1,6 +1,6 @@
 // ===== КОНФИГ =====
-const GITHUB_RAW = 'https://raw.githubusercontent.comGrifMcPo/TelegramBotFAKEDDOS/main';
-const GITHUB_API = 'https://api.github.com/repos/GrifMcPo/TelegramBotFAKEDDOS/contents';
+const GITHUB_RAW = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main';
+const GITHUB_API = 'https://api.github.com/repos/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/contents';
 
 // ===== ПЕРЕМЕННЫЕ =====
 let commandId = 0;
