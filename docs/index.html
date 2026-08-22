@@ -7,98 +7,37 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>RCON - Управление ботом</title>
-    <link rel="stylesheet" href="style.css?v=2.0.0">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="mainApp" class="main-app">
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <div class="sidebar-logo">
-                <span>🚀 RCON</span>
-                <small>Bot Control Panel</small>
-            </div>
-            <nav class="sidebar-nav">
-                <a href="#" class="nav-item active" data-page="console" onclick="showConsole()">
-                    <span class="nav-icon">💻</span> Консоль
-                </a>
-                <a href="#" class="nav-item" data-page="users" onclick="loadUsers()">
-                    <span class="nav-icon">👥</span> Пользователи
-                </a>
-                <a href="#" class="nav-item" data-page="stats" onclick="loadStats()">
-                    <span class="nav-icon">📊</span> Статистика
-                </a>
-                <a href="#" class="nav-item" data-page="blacklist" onclick="loadBlacklist()">
-                    <span class="nav-icon">⛔</span> Черный список
-                </a>
-                <a href="#" class="nav-item" data-page="logs" onclick="showLogsPanel()">
-                    <span class="nav-icon">📝</span> Логи
-                </a>
-            </nav>
-            <div class="sidebar-footer">
-                <div class="status-bot" id="botStatus">
-                    <span class="status-dot online"></span>
-                    <span>Бот активен</span>
-                </div>
-            </div>
+    <div class="container">
+        <header>
+            <h1>🚀 RCON</h1>
+            <span class="status" id="botStatus">🟢 Бот активен</span>
+        </header>
+
+        <div class="quick-commands">
+            <button onclick="sendCommand('/help')">/help</button>
+            <button onclick="sendCommand('/stats')">/stats</button>
+            <button onclick="sendCommand('/idlist')">/idlist</button>
+            <button onclick="sendCommand('/ping')">/ping</button>
+            <button onclick="sendCommand('/time')">/time</button>
         </div>
 
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Header -->
-            <header class="header">
-                <h2 id="pageTitle">💻 RCON Консоль</h2>
-                <div class="header-time" id="currentTime">🕐 Загрузка...</div>
-            </header>
-
-            <!-- Quick Commands -->
-            <div class="quick-commands">
-                <button onclick="sendCommand('/help')">/help</button>
-                <button onclick="sendCommand('/stats')">/stats</button>
-                <button onclick="sendCommand('/idlist')">/idlist</button>
-                <button onclick="sendCommand('/ping')">/ping</button>
-                <button onclick="sendCommand('/time')">/time</button>
-                <button onclick="sendCommand('/logs 8308522569')">/logs админ</button>
-            </div>
-
-            <!-- Console -->
-            <div class="console">
-                <div class="console-output" id="consoleOutput">
-                    <div class="log-entry">
-                        <span class="success">✅ RCON подключен</span>
-                        <br>
-                        <span class="result">Введите /help для списка команд</span>
-                    </div>
-                </div>
-                <div class="console-input">
-                    <input type="text" id="commandInput" placeholder="Введите команду... (например /help)" onkeydown="if(event.key==='Enter') sendCommandFromInput()">
-                    <button onclick="sendCommandFromInput()">▶ Отправить</button>
+        <div class="console">
+            <div class="console-output" id="consoleOutput">
+                <div class="log-entry">
+                    <span class="success">✅ RCON подключен</span><br>
+                    <span class="result">Введите команду или нажмите на кнопку</span>
                 </div>
             </div>
-
-            <!-- Status Bar -->
-            <div class="status-bar">
-                <div class="status-item" id="statsUsers">👤 Пользователей: 0</div>
-                <div class="status-item" id="statsCommands">📝 Команд: 0</div>
-                <div class="status-item" id="statsProbes">🔍 Пробивов: 0</div>
-                <div class="status-item" id="lastCommand">⏳ Последняя команда: -</div>
-            </div>
-
-            <!-- Logs Panel -->
-            <div id="logsPanel" class="logs-panel" style="display:none">
-                <div class="logs-search">
-                    <input type="text" id="logsSearch" placeholder="Введите ID или @username..." onkeydown="if(event.key==='Enter') searchLogs()">
-                    <button onclick="searchLogs()">🔍 Найти</button>
-                </div>
-                <div id="logsResult" class="logs-result"></div>
+            <div class="console-input">
+                <input type="text" id="commandInput" placeholder="Введите команду..." onkeydown="if(event.key==='Enter') sendCommandFromInput()">
+                <button onclick="sendCommandFromInput()">▶ Отправить</button>
             </div>
         </div>
     </div>
 
-    <script>
-        // ===== АВТОМАТИЧЕСКАЯ ВЕРСИЯ СКРИПТА =====
-        // При каждом обновлении страницы версия меняется!
-        const scriptVersion = Date.now();
-        document.write('<script src="script.js?v=' + scriptVersion + '"><\/script>');
-    </script>
+    <script src="script.js"></script>
 </body>
 </html>
