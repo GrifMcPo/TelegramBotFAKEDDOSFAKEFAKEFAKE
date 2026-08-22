@@ -7,24 +7,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Login Screen -->
-    <div id="loginScreen" class="login-screen">
-        <div class="login-box">
-            <div class="login-logo">
-                <span class="logo-icon">🚀</span>
-                <h1>RCON</h1>
-                <p>Управление ботом через веб-консоль</p>
-            </div>
-            <div class="login-form">
-                <input type="password" id="passwordInput" placeholder="Введите пароль..." onkeydown="if(event.key==='Enter') login()">
-                <button onclick="login()">Войти</button>
-                <div id="loginError" class="login-error"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Main App -->
-    <div id="mainApp" class="main-app" style="display:none">
+    <div id="mainApp" class="main-app">
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="sidebar-logo">
@@ -49,7 +32,10 @@
                 </a>
             </nav>
             <div class="sidebar-footer">
-                <button class="logout-btn" onclick="logout()">🚪 Выйти</button>
+                <div class="status-bot" id="botStatus">
+                    <span class="status-dot online"></span>
+                    <span>Бот активен</span>
+                </div>
             </div>
         </div>
 
@@ -90,13 +76,10 @@
 
             <!-- Status Bar -->
             <div class="status-bar">
-                <div class="status-item">
-                    <span class="status-dot online"></span>
-                    <span>Бот онлайн</span>
-                </div>
                 <div class="status-item" id="statsUsers">👤 Пользователей: 0</div>
                 <div class="status-item" id="statsCommands">📝 Команд: 0</div>
                 <div class="status-item" id="statsProbes">🔍 Пробивов: 0</div>
+                <div class="status-item" id="lastCommand">⏳ Последняя команда: -</div>
             </div>
 
             <!-- Logs Panel -->
