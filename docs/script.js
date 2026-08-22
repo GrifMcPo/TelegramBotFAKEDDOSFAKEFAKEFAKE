@@ -1,210 +1,281 @@
-const VALID_KEYS = [
-    'OWNER!KEY!_%!$W@$%OWENR!@#W$!($',
-    'ADMIN!KEY!@#$%^&*()',
-    'SUPER!ADMIN!KEY!12345',
-    'BOSS!KEY!_!@#$%^&*',
-    'MASTER!KEY!QWERTY123'
-];
+// ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ =====
+let isLoggedIn = false;
 
-const DATA_URL = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main/';
+// ===== ПРОВЕРКА АВТОРИЗАЦИИ =====
+function checkAuth() {
+    fetch('/api/stats')
+        .then(res => {
+            if (res.status === 401) {
+                document.getElementById('loginScreen').style.display = 'flex';
+                document.getElementById('mainApp').style.display = 'none';
+                isLoggedIn = false;
+            } else {
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('mainApp').style.display = 'flex';
+                isLoggedIn = true;
+                updateStatus();
+                updateTime();
+            }
+        })
+        .catch(() => {
+            // Если сервер недоступен - показываем логин
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('mainApp').style.display = 'none';
+        });
+}
 
-let logsData = [];
-
-// ========== ВХОД ==========
-const loginPage = document.getElementById('loginPage');
-const mainPage = document.getElementById('mainPage');
-const keyInput = document.getElementById('keyInput');
-const loginBtn = document.getElementById('loginBtn');
-const loginError = document.getElementById('loginError');
-const logoutBtn = document.getElementById('logoutBtn');
-
+// ===== ЛОГИН =====
 function login() {
-    const key = keyInput.value.trim();
-    if (VALID_KEYS.includes(key)) {
-        loginPage.style.display = 'none';
-        mainPage.style.display = 'block';
-        loginError.classList.remove('show');
-        loadAllData();
-        setInterval(loadAllData, 30000);
-        startClock();
+    const password = document.getElementById('passwordInput').value;
+    const errorEl = document.getElementById('loginError');
+    
+    if (!password) {
+        errorEl.textContent = '❌ Введите пароль';
+        return;
+    }
+    
+    fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: password })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'success') {
+            errorEl.textContent = '';
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'flex';
+            isLoggedIn = true;
+            updateStatus();
+            updateTime();
+            addLog('✅ Авторизация успешна', 'success');
+        } else {
+            errorEl.textContent = '❌ ' + data.message;
+        }
+    })
+    .catch(() => {
+        errorEl.textContent = '❌ Ошибка соединения с сервером';
+    });
+}
+
+// ===== ВЫХОД =====
+function logout() {
+    fetch('/logout')
+        .then(() => {
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('mainApp').style.display = 'none';
+            isLoggedIn = false;
+        });
+}
+
+// ===== ДОБАВЛЕНИЕ В КОНСОЛЬ =====
+function addLog(text, type = 'result') {
+    const output = document.getElementById('consoleOutput');
+    const time = new Date().toLocaleTimeString('ru-RU');
+    const typeClass = type || 'result';
+    
+    output.innerHTML += `<div class="log-entry"><span class="time">[${time}]</span> <span class="${typeClass}">${text.replace(/\n/g, '<br>')}</span></div>`;
+    output.scrollTop = output.scrollHeight;
+}
+
+// ===== ОТПРАВКА КОМАНДЫ =====
+function sendCommand(command) {
+    if (!command || !isLoggedIn) return;
+    
+    const time = new Date().toLocaleTimeString('ru-RU');
+    addLog(`$ ${command}`, 'command');
+    
+    fetch('/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: command })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'success') {
+            addLog(data.result, 'result');
+        } else {
+            addLog(`❌ ${data.message || 'Ошибка'}`, 'error');
+        }
+        updateStatus();
+    })
+    .catch(err => {
+        addLog(`❌ Ошибка соединения: ${err.message}`, 'error');
+    });
+}
+
+function sendCommandFromInput() {
+    const input = document.getElementById('commandInput');
+    const command = input.value.trim();
+    if (command) {
+        sendCommand(command);
+        input.value = '';
+    }
+}
+
+// ===== ОБНОВЛЕНИЕ СТАТУСА =====
+function updateStatus() {
+    if (!isLoggedIn) return;
+    
+    fetch('/api/stats')
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                document.getElementById('statsUsers').textContent = `👤 Пользователей: ${data.users}`;
+                document.getElementById('statsCommands').textContent = `📝 Команд: ${data.commands}`;
+                document.getElementById('statsProbes').textContent = `🔍 Пробивов: ${data.probes}`;
+            }
+        })
+        .catch(() => {});
+}
+
+// ===== ОБНОВЛЕНИЕ ВРЕМЕНИ =====
+function updateTime() {
+    const now = new Date();
+    const str = now.toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+    document.getElementById('currentTime').textContent = '🕐 ' + str;
+}
+
+// ===== ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ =====
+function loadUsers() {
+    sendCommand('/idlist');
+}
+
+// ===== ЗАГРУЗКА СТАТИСТИКИ =====
+function loadStats() {
+    sendCommand('/stats');
+}
+
+// ===== ЗАГРУЗКА ЧЕРНОГО СПИСКА =====
+function loadBlacklist() {
+    if (!isLoggedIn) return;
+    
+    fetch('/api/blacklist')
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                let result = '⛔ ЧЕРНЫЙ СПИСОК\n\n';
+                if (data.count === 0) {
+                    result += '📭 Черный список пуст';
+                } else {
+                    for (const [uid, info] of Object.entries(data.blacklist)) {
+                        result += `🆔 ${uid}\n`;
+                        result += `📌 Причина: ${info.reason || 'Не указана'}\n`;
+                        result += `👤 Добавил: ${info.added_by || 'Неизвестно'}\n`;
+                        result += `🕐 Время: ${info.added_at || 'Неизвестно'}\n`;
+                        if (info.expires_at) {
+                            result += `⏱ Истекает: ${info.expires_at}\n`;
+                        }
+                        result += '─' * 20 + '\n';
+                    }
+                }
+                addLog(result, 'result');
+            } else {
+                addLog(`❌ ${data.message || 'Ошибка загрузки черного списка'}`, 'error');
+            }
+        })
+        .catch(err => {
+            addLog(`❌ Ошибка: ${err.message}`, 'error');
+        });
+}
+
+// ===== ПОИСК ЛОГОВ =====
+function showLogsPanel() {
+    const panel = document.getElementById('logsPanel');
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        document.getElementById('logsResult').innerHTML = '';
     } else {
-        loginError.classList.add('show');
-        keyInput.value = '';
-        keyInput.focus();
-        setTimeout(() => loginError.classList.remove('show'), 3000);
+        panel.style.display = 'none';
     }
 }
 
-loginBtn.addEventListener('click', login);
-keyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
-
-logoutBtn.addEventListener('click', () => {
-    mainPage.style.display = 'none';
-    loginPage.style.display = 'flex';
-    keyInput.value = '';
-});
-
-// ========== ЧАСЫ ==========
-function startClock() {
-    setInterval(() => {
-        const now = new Date();
-        const time = now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow' });
-        document.getElementById('liveTime').textContent = `🕐 ${time} МСК`;
-    }, 1000);
+function searchLogs() {
+    const query = document.getElementById('logsSearch').value.trim();
+    if (!query) {
+        document.getElementById('logsResult').innerHTML = '❌ Введите ID или @username';
+        return;
+    }
+    
+    fetch(`/api/logs/${encodeURIComponent(query)}`)
+        .then(res => res.json())
+        .then(data => {
+            const resultEl = document.getElementById('logsResult');
+            if (data.status === 'success') {
+                if (data.count === 0) {
+                    resultEl.innerHTML = `❌ Логи не найдены для ${data.identifier}`;
+                    return;
+                }
+                let html = `📊 ЛОГИ ДЛЯ: ${data.identifier}\n`;
+                html += `📝 Всего команд: ${data.count}\n`;
+                html += `🕐 За последние 5 дней\n\n`;
+                html += '─'.repeat(30) + '\n\n';
+                
+                data.logs.slice(-50).forEach(log => {
+                    html += `🕐 ${log.time || 'Нет времени'}\n`;
+                    html += `📝 ${log.command || 'Неизвестно'}\n`;
+                    if (log.target) html += `🎯 ${log.target}\n`;
+                    html += '─'.repeat(20) + '\n';
+                });
+                
+                resultEl.innerHTML = html.replace(/\n/g, '<br>');
+            } else {
+                resultEl.innerHTML = `❌ ${data.message || 'Ошибка'}`;
+            }
+        })
+        .catch(err => {
+            document.getElementById('logsResult').innerHTML = `❌ Ошибка: ${err.message}`;
+        });
 }
 
-// ========== ТАБЫ ==========
-document.querySelectorAll('.nav-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const tab = btn.dataset.tab;
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        document.getElementById(`tab-${tab}`).classList.add('active');
+// ===== НАВИГАЦИЯ =====
+document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', function(e) {
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        this.classList.add('active');
+        
+        const page = this.dataset.page;
+        const titles = {
+            'console': '💻 RCON Консоль',
+            'users': '👥 Пользователи',
+            'stats': '📊 Статистика',
+            'blacklist': '⛔ Черный список',
+            'logs': '📝 Логи'
+        };
+        document.getElementById('pageTitle').textContent = titles[page] || 'RCON';
     });
 });
 
-// ========== ЗАГРУЗКА ==========
-async function loadAllData() {
-    await loadLogs();
-}
-
-async function loadLogs() {
-    try {
-        const response = await fetch(DATA_URL + 'logs.json?t=' + Date.now());
-        if (!response.ok) throw new Error('logs.json не найден');
-        logsData = await response.json();
-        renderLogs();
-        renderChats();
-        renderStats();
-        document.getElementById('updateTime').textContent = '🔄 Обновлено: ' + new Date().toLocaleTimeString('ru-RU');
-    } catch (error) {
-        console.error('Ошибка:', error);
-        document.getElementById('logsContainer').innerHTML = '<div class="loading-text">❌ Ошибка загрузки данных</div>';
-        showDemoData();
-    }
-}
-
-function showDemoData() {
-    logsData = [
-        { "command": "/start", "username": "SlNpidora", "user_id": "8308522569", "time": "20.08.2026 15:30:00",
-            "type": "command" },
-        { "command": "/whois ip 8.8.8.8", "username": "SlNpidora", "user_id": "8308522569", "target": "8.8.8.8",
-            "time": "20.08.2026 15:31:00", "type": "probe" },
-    ];
-    renderLogs();
-    renderChats();
-    renderStats();
-}
-
-function renderLogs() {
-    const container = document.getElementById('logsContainer');
-    const search = document.getElementById('searchLogs').value.toLowerCase();
-
-    const filtered = logsData.filter(log =>
-        (log.command || '').toLowerCase().includes(search) ||
-        (log.username || '').toLowerCase().includes(search) ||
-        (log.target || '').toLowerCase().includes(search)
-    );
-
-    if (!filtered.length) {
-        container.innerHTML = '<div class="loading-text">📭 Нет записей</div>';
-        return;
-    }
-
-    container.innerHTML = filtered.slice().reverse().map(log => `
-        <div class="log-entry">
-            <div class="log-header">
-                <span class="log-user">👤 ${log.username || 'Нет'} (${log.user_id || '?'})</span>
-                <span class="log-time">${log.time || ''}</span>
-            </div>
-            <div class="log-command">📝 ${log.command || 'Неизвестно'}</div>
-            ${log.target ? `<div class="log-target">🎯 ${log.target}</div>` : ''}
-            <div class="log-type">${log.type || 'command'}</div>
-        </div>
-    `).join('');
-}
-
-function renderChats() {
-    const container = document.getElementById('chatsContainer');
-    const users = {};
-
-    logsData.forEach(log => {
-        const id = log.user_id;
-        if (!users[id]) users[id] = { username: log.username || 'Нет', count: 0, logs: [] };
-        users[id].count++;
-        users[id].logs.push(log);
+// ===== ИНИЦИАЛИЗАЦИЯ =====
+// Проверяем авторизацию при загрузке
+document.addEventListener('DOMContentLoaded', function() {
+    checkAuth();
+    setInterval(updateTime, 1000);
+    setInterval(updateStatus, 30000);
+    
+    // Если нажали Enter в поле ввода
+    document.getElementById('commandInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sendCommandFromInput();
+        }
     });
+    
+    // Автоматический вход по Enter на странице логина
+    document.getElementById('passwordInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            login();
+        }
+    });
+});
 
-    const entries = Object.entries(users);
-    if (!entries.length) {
-        container.innerHTML = '<div class="loading-text">📭 Нет пользователей</div>';
-        return;
-    }
-
-    container.innerHTML = entries.map(([id, data]) => `
-        <div class="chat-card" onclick="openChat('${id}', '${data.username}', ${JSON.stringify(data.logs).replace(/"/g, '&quot;')})">
-            <div class="chat-username">👤 ${data.username}</div>
-            <div class="chat-id">🆔 ${id}</div>
-            <div class="chat-count">📝 ${data.count} команд</div>
-            <div class="chat-last">🕐 ${data.logs[data.logs.length - 1]?.time || 'Нет'}</div>
-        </div>
-    `).join('');
-}
-
-function renderStats() {
-    const users = new Set(logsData.map(l => l.user_id));
-    const probes = logsData.filter(l => l.type === 'probe');
-    document.getElementById('statUsers').textContent = users.size;
-    document.getElementById('statCommands').textContent = logsData.length;
-    document.getElementById('statProbes').textContent = probes.length;
-    document.getElementById('statLastUpdate').textContent = new Date().toLocaleTimeString('ru-RU');
-}
-
-function filterLogs() { renderLogs(); }
-
-// ========== МОДАЛКА ==========
-function openChat(userId, username, logs) {
-    let modal = document.getElementById('chatModal');
-    if (!modal) {
-        const newModal = document.createElement('div');
-        newModal.id = 'chatModal';
-        newModal.className = 'chat-modal';
-        newModal.innerHTML = `
-            <div class="chat-modal-content">
-                <div class="modal-header">
-                    <h2 id="modalTitle">💬 Чат с пользователем</h2>
-                    <button class="modal-close" onclick="closeChat()">✕</button>
-                </div>
-                <div id="modalMessages"></div>
-            </div>
-        `;
-        document.body.appendChild(newModal);
-        modal = document.getElementById('chatModal');
-    }
-
-    document.getElementById('modalTitle').textContent = `💬 @${username} (${userId})`;
-    const container = document.getElementById('modalMessages');
-    container.innerHTML = logs.slice().reverse().map(log => `
-        <div class="modal-message">
-            <div class="msg-time">${log.time || ''}</div>
-            <div class="msg-command">📝 ${log.command || 'Неизвестно'}</div>
-            ${log.target ? `<div class="msg-target">🎯 ${log.target}</div>` : ''}
-        </div>
-    `).join('');
-
-    modal.classList.add('active');
-}
-
-function closeChat() {
-    const modal = document.getElementById('chatModal');
-    if (modal) modal.classList.remove('active');
-}
-
-// ========== АЛИАС ДЛЯ КНОПКИ ==========
-function loadData() {
-    loadAllData();
-}
-
-console.log('🚀 ADMIN PANEL LOADED');
-console.log('📌 Загружаем только логи (черный список через бота)');
+// Если страница загружена, проверяем авторизацию
+console.log('🚀 RCON Client loaded');
