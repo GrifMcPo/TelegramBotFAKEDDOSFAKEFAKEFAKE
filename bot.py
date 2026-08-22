@@ -14,6 +14,9 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types import BusinessConnection
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import threading
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,6 +37,10 @@ BLACKLIST_FILE = "blacklist.json"
 
 business_connections = {}
 blocked_notified = {}
+
+# ===== FLASK API =====
+app = Flask(__name__)
+CORS(app)
 
 def get_msk_time():
     return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
@@ -208,8 +215,8 @@ def get_all_users():
         print(f"❌ Ошибка получения списка пользователей: {e}")
         return {}
 
-# ========== RCON ФУНКЦИИ ==========
-def execute_rcon_command(command):
+# ========== ВЫПОЛНЕНИЕ КОМАНД ==========
+def execute_command(command):
     try:
         command = command.strip()
         
@@ -228,7 +235,6 @@ def execute_rcon_command(command):
                 if full_name != 'Нет':
                     result += f"📛 {full_name}\n"
                 result += "─" * 20 + "\n"
-            
             return result
         
         if command == '/stats':
@@ -265,20 +271,15 @@ def execute_rcon_command(command):
                 if log.get('target'):
                     result += f"🎯 {log['target']}\n"
                 result += "─" * 20 + "\n"
-            
             return result
         
         if command == '/help':
-            return """📚 ДОСТУПНЫЕ КОМАНДЫ RCON
+            return """📚 ДОСТУПНЫЕ КОМАНДЫ
 
 📊 СТАТИСТИКА:
 /idlist - Список всех пользователей
 /stats - Общая статистика
 /logs [ID/@username] - Логи пользователя
-
-🔍 ПРОБИВ (в разработке):
-/whois ip [IP]
-/whois number [НОМЕР]
 
 ⚡ УПРАВЛЕНИЕ:
 /ban [ID] [время] [причина]
@@ -347,6 +348,81 @@ def execute_rcon_command(command):
     
     except Exception as e:
         return f"❌ Ошибка выполнения команды: {e}"
+
+# ========== API ДЛЯ САЙТА ==========
+@app.route('/api/command', methods=['POST'])
+def api_command():
+    try:
+        data = request.json
+        command = data.get('command', '').strip()
+        
+        if not command:
+            return jsonify({'status': 'error', 'message': 'Команда не указана'}), 400
+        
+        result = execute_command(command)
+        
+        return jsonify({
+            'status': 'success',
+            'command': command,
+            'result': result,
+            'time': get_msk_time()
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/stats', methods=['GET'])
+def api_stats():
+    try:
+        with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+            logs = json.load(f)
+        users = set(l.get('user_id') for l in logs)
+        probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
+        return jsonify({
+            'status': 'success',
+            'users': len(users),
+            'commands': len(logs),
+            'probes': probes,
+            'time': get_msk_time()
+        })
+    except:
+        return jsonify({'status': 'error', 'message': 'Статистика недоступна'}), 500
+
+@app.route('/api/blacklist', methods=['GET'])
+def api_blacklist():
+    try:
+        blacklist = load_blacklist()
+        return jsonify({
+            'status': 'success',
+            'blacklist': blacklist,
+            'count': len(blacklist)
+        })
+    except:
+        return jsonify({'status': 'error', 'message': 'Черный список недоступен'}), 500
+
+@app.route('/api/users', methods=['GET'])
+def api_users():
+    try:
+        users = get_all_users()
+        return jsonify({
+            'status': 'success',
+            'users': users,
+            'count': len(users)
+        })
+    except:
+        return jsonify({'status': 'error', 'message': 'Список пользователей недоступен'}), 500
+
+@app.route('/api/logs/<identifier>', methods=['GET'])
+def api_logs(identifier):
+    try:
+        logs = get_logs_for_user(identifier)
+        return jsonify({
+            'status': 'success',
+            'identifier': identifier,
+            'logs': logs,
+            'count': len(logs)
+        })
+    except:
+        return jsonify({'status': 'error', 'message': 'Логи недоступны'}), 500
 
 # ========== УДАЛЕНИЕ В БИЗНЕС-ЧАТЕ ==========
 async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
@@ -1387,12 +1463,15 @@ async def handle_callback(callback: types.CallbackQuery):
         await stats_command(callback.message)
         await callback.answer()
 
+# ========== ЗАПУСК API ==========
+def run_api():
+    app.run(host='0.0.0.0', port=8080, debug=False)
+
 async def main():
     print("=" * 60)
     print("🔥 БОТ ЗАПУЩЕН!")
     print(f"👤 АДМИН: {MAIN_ADMIN}")
-    print(f"📁 Файл логов: {LOGS_FILE}")
-    print(f"📁 Файл черного списка: {BLACKLIST_FILE}")
+    print("🌐 API: http://localhost:8080")
     print("📌 Команды с / — в личке бота")
     print("📌 Команды с . — в чатах с собеседниками")
     print("=" * 60)
@@ -1400,12 +1479,15 @@ async def main():
     if not os.path.exists(LOGS_FILE):
         with open(LOGS_FILE, 'w', encoding='utf-8') as f:
             json.dump([], f)
-        print(f"✅ Создан файл логов: {LOGS_FILE}")
     
     if not os.path.exists(BLACKLIST_FILE):
         with open(BLACKLIST_FILE, 'w', encoding='utf-8') as f:
             json.dump({}, f)
-        print(f"✅ Создан файл черного списка: {BLACKLIST_FILE}")
+    
+    # Запускаем API в отдельном потоке
+    api_thread = threading.Thread(target=run_api, daemon=True)
+    api_thread.start()
+    print("✅ API сервер запущен на порту 8080")
     
     try:
         await dp.start_polling(bot)
