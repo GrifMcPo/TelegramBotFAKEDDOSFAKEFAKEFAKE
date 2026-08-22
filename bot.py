@@ -123,22 +123,36 @@ def get_blacklist_reason(user_id):
 def is_admin(user_id):
     return user_id == MAIN_ADMIN
 
-# ========== ЛОГИ ==========
-def save_log_local(log_entry):
+# ========== ЛОГИ (ИСПРАВЛЕННЫЕ) ==========
+def save_log(log_entry):
+    """Сохраняет запись в лог-файл"""
     try:
+        # Убеждаемся, что папка существует
+        os.makedirs(os.path.dirname(LOGS_FILE) if os.path.dirname(LOGS_FILE) else '.', exist_ok=True)
+        
+        # Загружаем существующие логи
         logs = []
         if os.path.exists(LOGS_FILE):
-            with open(LOGS_FILE, 'r', encoding='utf-8') as f:
-                logs = json.load(f)
+            try:
+                with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+                    logs = json.load(f)
+                    if not isinstance(logs, list):
+                        logs = []
+            except:
+                logs = []
+        
+        # Добавляем новую запись
         logs.append(log_entry)
+        
+        # Сохраняем
         with open(LOGS_FILE, 'w', encoding='utf-8') as f:
             json.dump(logs, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"✅ Лог сохранен: {log_entry.get('command', 'unknown')}")
         return True
-    except:
+    except Exception as e:
+        logger.error(f"❌ Ошибка сохранения лога: {e}")
         return False
-
-def save_log(log_entry):
-    save_log_local(log_entry)
 
 # ========== УДАЛЕНИЕ В БИЗНЕС-ЧАТЕ ==========
 async def delete_business_message(chat_id: int, message_id: int, connection_id: str):
@@ -694,11 +708,12 @@ async def probe_ip_business(chat_id, ip, connection_id, user_id, message):
         await send_to_business_chat(chat_id, f"❌ Некорректный IP: {ip}", connection_id)
         return
     
+    # СОХРАНЯЕМ ЛОГ
     save_log({
         "command": f".whois ip {ip}",
         "user_id": user_id,
         "username": message.from_user.username or "Нет",
-        "full_name": message.from_user.full_name,
+        "full_name": message.from_user.full_name or "Нет",
         "target": ip,
         "time": get_msk_time()
     })
@@ -728,11 +743,12 @@ async def probe_ip_business(chat_id, ip, connection_id, user_id, message):
 
 # ========== ПРОБИВ НОМЕРА В БИЗНЕС-ЧАТЕ ==========
 async def probe_phone_business(chat_id, phone, connection_id, user_id, message):
+    # СОХРАНЯЕМ ЛОГ
     save_log({
         "command": f".whois number {phone}",
         "user_id": user_id,
         "username": message.from_user.username or "Нет",
-        "full_name": message.from_user.full_name,
+        "full_name": message.from_user.full_name or "Нет",
         "target": phone,
         "time": get_msk_time()
     })
@@ -779,7 +795,7 @@ async def start(message: types.Message):
         "command": "/start",
         "user_id": user_id,
         "username": message.from_user.username or "Нет",
-        "full_name": message.from_user.full_name,
+        "full_name": message.from_user.full_name or "Нет",
         "time": get_msk_time()
     })
     
@@ -927,7 +943,7 @@ async def probe_ip_command(message: types.Message, ip: str):
         "command": f"/whois ip {ip}",
         "user_id": message.from_user.id,
         "username": message.from_user.username or "Нет",
-        "full_name": message.from_user.full_name,
+        "full_name": message.from_user.full_name or "Нет",
         "target": ip,
         "time": get_msk_time()
     })
@@ -959,7 +975,7 @@ async def probe_phone_command(message: types.Message, phone: str):
         "command": f"/whois number {phone}",
         "user_id": message.from_user.id,
         "username": message.from_user.username or "Нет",
-        "full_name": message.from_user.full_name,
+        "full_name": message.from_user.full_name or "Нет",
         "target": phone,
         "time": get_msk_time()
     })
@@ -1115,13 +1131,16 @@ async def main():
     print("📌 Команды с . — в чатах с собеседниками")
     print("=" * 60)
     
+    # Создаем файлы если их нет
     if not os.path.exists(LOGS_FILE):
         with open(LOGS_FILE, 'w', encoding='utf-8') as f:
             json.dump([], f)
+        print(f"✅ Создан файл логов: {LOGS_FILE}")
     
     if not os.path.exists(BLACKLIST_FILE):
         with open(BLACKLIST_FILE, 'w', encoding='utf-8') as f:
             json.dump({}, f)
+        print(f"✅ Создан файл черного списка: {BLACKLIST_FILE}")
     
     try:
         await dp.start_polling(bot)
