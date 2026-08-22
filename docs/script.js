@@ -33,14 +33,16 @@ function addLog(text, type = 'result') {
 // ===== ПРОВЕРКА БОТА =====
 function updateBotStatus(online) {
     const status = document.getElementById('botStatus');
-    if (online) {
-        status.textContent = '🟢 Бот активен';
-        status.style.color = '#00ff88';
-        status.style.borderColor = 'rgba(0, 255, 136, 0.2)';
-    } else {
-        status.textContent = '🔴 Бот офлайн';
-        status.style.color = '#ff4444';
-        status.style.borderColor = 'rgba(255, 68, 68, 0.2)';
+    if (status) {
+        if (online) {
+            status.textContent = '🟢 Бот активен';
+            status.style.color = '#00ff88';
+            status.style.borderColor = 'rgba(0, 255, 136, 0.2)';
+        } else {
+            status.textContent = '🔴 Бот офлайн';
+            status.style.color = '#ff4444';
+            status.style.borderColor = 'rgba(255, 68, 68, 0.2)';
+        }
     }
 }
 
@@ -122,17 +124,10 @@ function sendCommandFromInput() {
     }
 }
 
-// ===== ОБНОВЛЕНИЕ ВРЕМЕНИ =====
-function updateTime() {
-    const now = new Date();
-    document.getElementById('currentTime').textContent = '🕐 ' + now.toLocaleString('ru-RU');
-}
-
 // ===== ИНИЦИАЛИЗАЦИЯ =====
 document.addEventListener('DOMContentLoaded', function() {
-    updateTime();
-    setInterval(updateTime, 1000);
     updateBotStatus(true);
+    console.log('🚀 RCON готов');
     
     document.getElementById('commandInput').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
@@ -140,6 +135,4 @@ document.addEventListener('DOMContentLoaded', function() {
             sendCommandFromInput();
         }
     });
-    
-    console.log('🚀 RCON готов');
 });
