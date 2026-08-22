@@ -1,5 +1,6 @@
-aiogram==3.5.0
+aiogram==2.25.1
 python-dotenv==1.0.0
-requests
-phonenumbers
-aiosqlite
+phonenumbers==8.13.18
+requests==2.31.0
+Flask==2.3.3
+flask-cors==4.0.0
