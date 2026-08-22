@@ -28,11 +28,11 @@ async function sendCommand() {
     addLog(`&gt; ${cmd}`, 'info');
     inputField.value = '';
     sendBtn.disabled = true;
-    sendBtn.textContent = 'ЖДЕМ...';
+    sendBtn.textContent = 'ЖДЕМ ОТВЕТА...';
 
     try {
         // 1. Отправляем команду
-        const postRes = await fetch(`${supabaseUrl}/rest/v1/commands`, {
+        await fetch(`${supabaseUrl}/rest/v1/commands`, {
             method: 'POST',
             headers: {
                 apikey: supabaseKey,
@@ -42,17 +42,13 @@ async function sendCommand() {
             body: JSON.stringify({ command: cmd })
         });
 
-        if (!postRes.ok) {
-            const errText = await postRes.text();
-            throw new Error(`Supabase POST error: ${errText}`);
-        }
-
-        // 2. Опрос таблицы responses
+        // 2. Опрос таблицы responses 
         let attempts = 0;
         const interval = setInterval(async () => {
             attempts++;
             
             try {
+                // ИСПРАВЛЕНИЕ ТУТ: фильтруем по response_id
                 const res = await fetch(`${supabaseUrl}/rest/v1/responses?response_id=eq.${currentId}&select=result,time`, {
                     headers: { 
                         apikey: supabaseKey, 
@@ -60,38 +56,38 @@ async function sendCommand() {
                     }
                 });
 
-                if (!res.ok) throw new Error("Failed to fetch response");
+                if (!res.ok) throw new Error("Network failed");
                 
                 const data = await res.json();
 
-                // Проверяем, пришел ли именно наш ответ
+                // Если массив не пустой - значит нашли наш ответ
                 if (data && Array.isArray(data) && data.length > 0) {
                     clearInterval(interval);
                     
-                    // Удаляем заглушку "ЖДЕМ", чтобы не мусорить в логах
+                    // Удаляем сообщение "ЖДЕМ", чтобы было чисто
                     const lines = consoleDiv.querySelectorAll('.log-line');
-                    const lastLine = lines[lines.length - 1];
-                    if (lastLine && lastLine.innerText.includes(currentId) && lastLine.innerText.includes('ЖДЕМ')) {
-                        lastLine.remove();
+                    if (lines.length > 0) {
+                        const lastLine = lines[lines.length - 1];
+                        if (lastLine.innerText.includes(currentId) && lastLine.innerText.includes('ЖДЕМ')) {
+                            lastLine.remove();
+                        }
                     }
 
-                    // Выводим красивый ответ от бота
                     const resultText = data[0].result || "[Пустой ответ]";
                     addLog(resultText.replace(/\n/g, '<br>'), 'success');
                 
-                } else if (attempts > 45) { // Таймаут ~45 секунд
+                } else if (attempts > 45) {
                     clearInterval(interval);
-                    addLog('⏰ Время ожидания истекло. Попробуйте снова.', 'error');
+                    addLog('⏰ Время ожидания истекло.', 'error');
                 }
 
-            } catch (pollErr) {
-                // Игнорируем мелкие сетевые сбои во время опроса
+            } catch (e) {
                 if (attempts > 45) {
                     clearInterval(interval);
-                    addLog('❌ Ошибка связи при ожидании ответа.', 'error');
+                    addLog('❌ Ошибка связи.', 'error');
                 }
             }
-        }, 1000); // Раз в секунду
+        }, 1000); 
         
     } catch (err) {
         addLog(`❌ Критическая ошибка: ${err.message}`, 'error');
