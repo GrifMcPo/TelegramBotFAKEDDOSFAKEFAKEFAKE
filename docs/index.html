@@ -32,7 +32,7 @@
                 <small>Bot Control Panel</small>
             </div>
             <nav class="sidebar-nav">
-                <a href="#" class="nav-item active" data-page="console">
+                <a href="#" class="nav-item active" data-page="console" onclick="showConsole()">
                     <span class="nav-icon">💻</span> Консоль
                 </a>
                 <a href="#" class="nav-item" data-page="users" onclick="loadUsers()">
@@ -69,6 +69,8 @@
                 <button onclick="sendCommand('/ping')">/ping</button>
                 <button onclick="sendCommand('/time')">/time</button>
                 <button onclick="sendCommand('/logs 8308522569')">/logs админ</button>
+                <button onclick="sendCommand('/ban 123456 60 тест')">/ban тест</button>
+                <button onclick="sendCommand('/unban 123456 тест')">/unban тест</button>
             </div>
 
             <!-- Console -->
@@ -97,7 +99,7 @@
                 <div class="status-item" id="statsProbes">🔍 Пробивов: 0</div>
             </div>
 
-            <!-- Logs Panel (hidden by default) -->
+            <!-- Logs Panel -->
             <div id="logsPanel" class="logs-panel" style="display:none">
                 <div class="logs-search">
                     <input type="text" id="logsSearch" placeholder="Введите ID или @username..." onkeydown="if(event.key==='Enter') searchLogs()">
