@@ -2,7 +2,7 @@
 console.log('🚀 RCON Client v4.0');
 
 // ===== КОНФИГ =====
-const BOT_TOKEN = 'ВАШ_ТОКЕН_БОТА';  // ВСТАВЬ СВОЙ ТОКЕН!
+const BOT_TOKEN = '8883586607:AAFFMFAzP2az6O76DpV8p9DwuGUawMlUVn0';  // ВСТАВЬ СВОЙ ТОКЕН!
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const ADMIN_ID = 8308522569;  // ТВОЙ ID
 
