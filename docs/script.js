@@ -1,6 +1,5 @@
 // ===== КОНФИГ =====
 const GITHUB_RAW = 'https://raw.githubusercontent.com/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/main';
-const GITHUB_API = 'https://api.github.com/repos/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/contents';
 
 // ===== ПЕРЕМЕННЫЕ =====
 let commandId = 0;
@@ -17,48 +16,85 @@ function addLog(text, type = 'result') {
     output.scrollTop = output.scrollHeight;
 }
 
-// ===== ОТПРАВКА КОМАНДЫ ЧЕРЕЗ ФАЙЛ =====
+// ===== ПРОВЕРКА ДОСТУПНОСТИ БОТА =====
+async function checkBotStatus() {
+    try {
+        const res = await fetch(`${GITHUB_RAW}/logs.json`, { cache: 'no-cache' });
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.length > 0) {
+                document.getElementById('botStatus').innerHTML = `
+                    <span class="status-dot online"></span>
+                    <span>Бот активен (${data.length} команд)</span>
+                `;
+                return true;
+            }
+        }
+        document.getElementById('botStatus').innerHTML = `
+            <span class="status-dot offline"></span>
+            <span>Бот офлайн</span>
+        `;
+        return false;
+    } catch (e) {
+        document.getElementById('botStatus').innerHTML = `
+            <span class="status-dot offline"></span>
+            <span>Бот недоступен</span>
+        `;
+        return false;
+    }
+}
+
+// ===== ОТПРАВКА КОМАНДЫ =====
 async function sendCommand(command) {
     if (!command || isWaitingResponse) return;
+    
+    // Проверяем статус бота
+    const botOnline = await checkBotStatus();
+    if (!botOnline) {
+        addLog('⚠️ Бот не отвечает! Проверьте GitHub Actions', 'warning');
+        return;
+    }
     
     commandId++;
     const currentId = commandId;
     isWaitingResponse = true;
     
     addLog(`$ ${command}`, 'command');
-    addLog('⏳ Отправка команды...', 'warning');
+    addLog('⏳ Отправка команды через файл...', 'warning');
     
     try {
-        // 1. Пишем команду в commands.json
+        // Пытаемся отправить команду через бота (он сам читает commands.json)
+        // Для этого используем GitHub API с правильным URL
+        
+        // Пробуем через HTTPS с валидным сертификатом
+        const apiUrl = 'https://api.github.com/repos/GrifMcPo/TelegramBotFAKEDDOSFAKEFAKEFAKE/contents/commands.json';
+        
         const commandData = {
             id: currentId,
-            command: command
+            command: command,
+            time: new Date().toISOString()
         };
         
         // Получаем текущий файл
-        const fileRes = await fetch(`${GITHUB_API}/commands.json`, {
-            headers: { 'Accept': 'application/vnd.github.v3+json' }
+        const fileRes = await fetch(apiUrl, {
+            headers: { 
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'Mozilla/5.0'
+            }
         });
         
         let sha = null;
-        let currentContent = '';
         if (fileRes.ok) {
             const fileData = await fileRes.json();
             sha = fileData.sha;
-            if (fileData.content) {
-                try {
-                    const decoded = atob(fileData.content);
-                    currentContent = decoded;
-                } catch(e) {}
-            }
         }
         
         // Обновляем файл
-        const updateRes = await fetch(`${GITHUB_API}/commands.json`, {
+        const updateRes = await fetch(apiUrl, {
             method: 'PUT',
             headers: {
-                'Authorization': `token ${GITHUB_TOKEN}`,
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0'
             },
             body: JSON.stringify({
                 message: `RCON command: ${command}`,
@@ -68,45 +104,25 @@ async function sendCommand(command) {
         });
         
         if (!updateRes.ok) {
-            throw new Error('Failed to write command');
+            const errData = await updateRes.json();
+            throw new Error(errData.message || 'Failed to write command');
         }
         
-        // 2. Ждем ответ
+        addLog('✅ Команда отправлена, ждем ответ...', 'success');
+        
+        // Ждем ответ
         let attempts = 0;
         let response = null;
-        let lastLogs = [];
         
-        while (attempts < 30) {
+        while (attempts < 25) {
             await new Promise(r => setTimeout(r, 2000));
             
-            // Проверяем response.json
-            const respRes = await fetch(`${GITHUB_RAW}/response.json`);
+            const respRes = await fetch(`${GITHUB_RAW}/response.json`, { cache: 'no-cache' });
             if (respRes.ok) {
                 const data = await respRes.json();
                 if (data.id === currentId && data.status === 'done') {
                     response = data;
                     break;
-                }
-            }
-            
-            // Проверяем логи на наличие новой записи
-            if (attempts % 3 === 0) {
-                const logRes = await fetch(`${GITHUB_RAW}/logs.json`);
-                if (logRes.ok) {
-                    const logs = await logRes.json();
-                    if (logs.length > lastLogs.length) {
-                        const newLogs = logs.slice(lastLogs.length);
-                        for (const log of newLogs) {
-                            if (log.command === command) {
-                                response = {
-                                    result: `✅ Команда выполнена (логи обновлены)`,
-                                    time: log.time || new Date().toISOString()
-                                };
-                                break;
-                            }
-                        }
-                        lastLogs = logs;
-                    }
                 }
             }
             attempts++;
@@ -116,7 +132,7 @@ async function sendCommand(command) {
         const output = document.getElementById('consoleOutput');
         const entries = output.querySelectorAll('.log-entry');
         for (const entry of entries) {
-            if (entry.textContent.includes('⏳ Отправка команды...')) {
+            if (entry.textContent.includes('⏳ Отправка команды через файл...')) {
                 entry.remove();
                 break;
             }
@@ -127,20 +143,36 @@ async function sendCommand(command) {
             updateStatus();
             document.getElementById('lastCommand').textContent = `⏳ Последняя: ${command}`;
         } else {
-            addLog('❌ Таймаут: бот не ответил (проверьте logs.json)', 'error');
+            // Проверяем логи
+            try {
+                const logRes = await fetch(`${GITHUB_RAW}/logs.json`, { cache: 'no-cache' });
+                if (logRes.ok) {
+                    const logs = await logRes.json();
+                    const lastLog = logs[logs.length - 1];
+                    if (lastLog && lastLog.command === command) {
+                        addLog(`✅ Команда выполнена (логи обновлены)`, 'success');
+                        updateStatus();
+                        isWaitingResponse = false;
+                        return;
+                    }
+                }
+            } catch(e) {}
+            
+            addLog('⏳ Команда отправлена, но ответ не получен', 'warning');
+            addLog('💡 Проверь logs.json в репозитории', 'warning');
         }
         
     } catch (err) {
         const output = document.getElementById('consoleOutput');
         const entries = output.querySelectorAll('.log-entry');
         for (const entry of entries) {
-            if (entry.textContent.includes('⏳ Отправка команды...')) {
+            if (entry.textContent.includes('⏳ Отправка команды через файл...')) {
                 entry.remove();
                 break;
             }
         }
         addLog(`❌ Ошибка: ${err.message}`, 'error');
-        addLog('💡 Проверьте: бот запущен в GitHub Actions?', 'warning');
+        addLog('💡 Попробуй обновить страницу (Ctrl+F5)', 'warning');
     }
     
     isWaitingResponse = false;
@@ -157,7 +189,7 @@ function sendCommandFromInput() {
 
 // ===== ОБНОВЛЕНИЕ СТАТУСА =====
 function updateStatus() {
-    fetch(`${GITHUB_RAW}/logs.json`)
+    fetch(`${GITHUB_RAW}/logs.json`, { cache: 'no-cache' })
         .then(res => {
             if (!res.ok) throw new Error('No logs');
             return res.json();
@@ -216,7 +248,7 @@ function loadBlacklist() {
     document.querySelector('[data-page="blacklist"]')?.classList.add('active');
     document.getElementById('pageTitle').textContent = '⛔ Черный список';
     
-    fetch(`${GITHUB_RAW}/blacklist.json`)
+    fetch(`${GITHUB_RAW}/blacklist.json`, { cache: 'no-cache' })
         .then(res => {
             if (!res.ok) throw new Error('Blacklist unavailable');
             return res.json();
@@ -269,7 +301,7 @@ function searchLogs() {
     
     document.getElementById('logsResult').innerHTML = '⏳ Загрузка...';
     
-    fetch(`${GITHUB_RAW}/logs.json`)
+    fetch(`${GITHUB_RAW}/logs.json`, { cache: 'no-cache' })
         .then(res => {
             if (!res.ok) throw new Error('Logs unavailable');
             return res.json();
@@ -317,6 +349,8 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(updateTime, 1000);
     updateStatus();
     setInterval(updateStatus, 30000);
+    checkBotStatus();
+    setInterval(checkBotStatus, 60000);
     
     document.getElementById('commandInput').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
