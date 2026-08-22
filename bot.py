@@ -14,21 +14,17 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BusinessConnection
 from aiogram import F
-import aioheader # Добавлено: библиотека для запросов к API
+import aiohttp
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 MAIN_ADMIN = 8308522569
 
-# НАСТРОЙКИ SUPABASE (берутся из .env или GitHub Secrets)
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") 
 
 if not BOT_TOKEN or not SUPABASE_URL or not SUPABASE_KEY:
     print("❌ КРИТИЧЕСКАЯ ОШИБКА: Не найдены Токен Бота или Ключи Supabase!")
-    print(f"Токен: {'Есть' if BOT_TOKEN else 'Нет'}")
-    print(f"URL: {'Есть' if SUPABASE_URL else 'Нет'}")
-    print(f"Key: {'Есть' if SUPABASE_KEY else 'Нет'}")
     sys.exit(1)
 
 bot = Bot(token=BOT_TOKEN)
@@ -42,7 +38,7 @@ blocked_notified = {}
 def get_msk_time():
     return (datetime.utcnow() + timedelta(hours=3)).strftime('%d.%m.%Y %H:%M:%S')
 
-# ========== ЧЕРНЫЙ СПИСОК (без изменений) ==========
+# ========== ЧЕРНЫЙ СПИСОК ==========
 def load_blacklist():
     try:
         if os.path.exists(BLACKLIST_FILE):
@@ -127,7 +123,7 @@ def get_blacklist_reason(user_id):
 def is_admin(user_id):
     return user_id == MAIN_ADMIN
 
-# ========== ЛОГИ (без изменений) ==========
+# ========== ЛОГИ ==========
 def save_log(log_entry):
     try:
         os.makedirs(os.path.dirname(LOGS_FILE), exist_ok=True)
@@ -213,7 +209,7 @@ def get_all_users():
         print(f"❌ Ошибка получения списка пользователей: {e}")
         return {}
 
-# ========== ВЫПОЛНЕНИЕ КОМАНД (без изменений) ==========
+# ========== ВЫПОЛНЕНИЕ КОМАНД ==========
 def execute_command(command):
     command = command.strip()
     
@@ -345,76 +341,306 @@ def execute_command(command):
 
 # ========== НОВАЯ ЛОГИКА SUPABASE ==========
 async def fetch_commands(session):
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Accept": "application/json"
-    }
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Accept": "application/json"}
     params = {"select": "*", "order": "created_at.asc"}
-    
     async with session.get(f"{SUPABASE_URL}/rest/v1/commands", headers=headers, params=params) as resp:
         if resp.status == 200:
             return await resp.json()
-        else:
-            text = await resp.text()
-            print(f"❌ [Supabase Fetch] Status: {resp.status}, Body: {text}")
-            return []
+        return []
 
 async def insert_response(session, cmd_id, result, time_str):
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "response_id": cmd_id,
-        "result": str(result),
-        "time": time_str
-    }
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
+    payload = {"response_id": cmd_id, "result": str(result), "time": time_str}
     async with session.post(f"{SUPABASE_URL}/rest/v1/responses", headers=headers, json=payload) as resp:
-        if resp.status != 201:
-            print(f"❌ [Supabase Insert] Failed: {await resp.text()}")
+        pass
 
-# ========== РАБОЧИЙ ЦИКЛ САЙТ-БОТ ==========
 async def supabase_worker():
     print("🟢 Worker запущен. Ожидание команд от сайта...")
     async with aiohttp.ClientSession() as session:
         while True:
             commands = await fetch_commands(session)
-            
             for cmd in commands:
                 cmd_id = cmd.get('id')
                 text = cmd.get('command', '').strip()
-                
                 if text and cmd_id:
                     print(f"🌐 Получена команда с сайта ID:{cmd_id}: {text}")
-                    
-                    # Выполняем вашу стандартную функцию
                     result = execute_command(text)
-                    
-                    # Записываем ответ в таблицу responses
                     await insert_response(session, cmd_id, result, get_msk_time())
                     print(f"✅ Ответ записан для ID: {cmd_id}")
-            
             await asyncio.sleep(3)
 
-# ========== ОБРАБОТЧИКИ TELEGRAM (БЕЗ ИЗМЕНЕНИЙ) ==========
+# ========== ОБРАБОТЧИКИ TELEGRAM (ВАШ КОД) ==========
 @dp.message(Command("start"))
-async def start(message: types.Message): ... # Весь ваш код handlers остается прежним
-@dp.message(Command("help")): ...
-@dp.message(Command("ping")): ...
-@dp.message(Command("time")): ...
-@dp.message(Command("info")): ...
-@dp.message(Command("stats")): ...
-@dp.message(Command("idlist")): ...
-@dp.message(Command("logs")): ...
-@dp.message(Command("whois")): ...
-@dp.message(Command("ban")): ...
-@dp.message(Command("unban")): ...
-@dp.callback_query(): ...
-# Функции probe_ip, analyze_results, show_animation тоже остаются без изменений!
+async def start(message: types.Message):
+    user_id = message.from_user.id
+    if is_blacklisted(user_id):
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
+        return
+    save_log({"command": "/start", "user_id": user_id, "username": message.from_user.username or "Нет", "full_name": message.from_user.full_name or "Нет", "time": get_msk_time()})
+    await message.answer("🔥 ДОБРО ПОЖАЛОВАТЬ В СИСТЕМУ!\n\n💡 /help - список команд\n📌 В чатах с собеседниками используй .команды", reply_markup=get_main_keyboard())
 
-# ВАЖНО: Убедитесь, что функции handle_business_message используют те же пути к LOGS_FILE и BLACKLIST_FILE
+@dp.message(Command("help"))
+async def help_command(message: types.Message):
+    user_id = message.from_user.id
+    if is_blacklisted(user_id):
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
+        return
+    await message.answer("📚 СПИСОК КОМАНД\n\n🔹 В ЛИЧКЕ БОТА (с /):\n/start - Главное меню\n/help - Справка\n/ping - Проверка\n/time - Время\n/info - Информация\n/stats - Статистика\n/whois ip [IP] - Пробив IP\n/whois number [НОМЕР] - Пробив номера\n/ban [ID] [время] [причина] - Бан (админ)\n/unban [ID] [причина] - Разбан (админ)\n/idlist - Список пользователей (админ)\n/logs [ID/@username] - Логи пользователя (админ)\n\n🔹 В ЧАТАХ (с .):\n.help - Справка\n.ping - Проверка\n.time - Время\n.info - Информация\n.stats - Статистика\n.whois ip [IP] - Пробив IP\n.whois number [НОМЕР] - Пробив номера\n.ban [ID] [время] [причина] - Бан (админ)\n.unban [ID] [причина] - Разбан (админ)\n.idlist - Список пользователей (админ)\n.logs [ID/@username] - Логи пользователя (админ)")
+
+@dp.message(Command("ping"))
+async def ping(message: types.Message):
+    user_id = message.from_user.id
+    if is_blacklisted(user_id):
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
+        return
+    await message.answer(f"🏓 Pong! {datetime.now().strftime('%H:%M:%S')}")
+
+@dp.message(Command("time"))
+async def time_command(message: types.Message):
+    user_id = message.from_user.id
+    if is_blacklisted(user_id):
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
+        return
+    await message.answer(f"🕐 МСК: {get_msk_time()}")
+
+@dp.message(Command("info"))
+async def info_command(message: types.Message):
+    user_id = message.from_user.id
+    if is_blacklisted(user_id):
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
+        return
+    user = message.from_user
+    await message.answer(f"👤 ИНФОРМАЦИЯ\n\n🆔 ID: {user.id}\n👤 Username: @{user.username or 'Нет'}\n📛 Имя: {user.full_name}\n🕐 Время: {get_msk_time()}")
+
+@dp.message(Command("stats"))
+async def stats_command(message: types.Message):
+    user_id = message.from_user.id
+    if is_blacklisted(user_id):
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
+        return
+    try:
+        with open(LOGS_FILE, 'r', encoding='utf-8') as f:
+            logs = json.load(f)
+        users = set(l.get('user_id') for l in logs)
+        probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
+        await message.answer(f"📊 СТАТИСТИКА\n\n👤 Пользователей: {len(users)}\n📝 Команд: {len(logs)}\n🔍 Пробивов: {probes}\n🕐 Время: {get_msk_time()}")
+    except:
+        await message.answer("📊 Статистика временно недоступна")
+
+@dp.message(Command("idlist"))
+async def idlist_command(message: types.Message):
+    user_id = message.from_user.id
+    if not is_admin(user_id):
+        await message.answer("❌ У вас нет прав на эту команду!")
+        return
+    users = get_all_users()
+    if not users:
+        await message.answer("📊 Нет пользователей в логах")
+        return
+    result = "👥 СПИСОК ПОЛЬЗОВАТЕЛЕЙ\n\n"
+    for uid, data in users.items():
+        username = data.get('username', 'Нет')
+        full_name = data.get('full_name', 'Нет')
+        result += f"🆔 {uid}\n"
+        if username != 'Нет':
+            result += f"👤 @{username}\n"
+        if full_name != 'Нет':
+            result += f"📛 {full_name}\n"
+        result += "─" * 20 + "\n"
+    if len(result) > 4000:
+        parts = [result[i:i+4000] for i in range(0, len(result), 4000)]
+        for part in parts:
+            await message.answer(part)
+    else:
+        await message.answer(result)
+
+@dp.message(Command("logs"))
+async def logs_command(message: types.Message):
+    user_id = message.from_user.id
+    if not is_admin(user_id):
+        await message.answer("❌ У вас нет прав на эту команду!")
+        return
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        await message.answer("❌ /logs [ID или @username]\nПример: /logs 8308522569 или /logs @SlNpidora")
+        return
+    identifier = args[1].strip()
+    logs = get_logs_for_user(identifier)
+    if not logs:
+        await message.answer(f"❌ Логи не найдены для {identifier}")
+        return
+    total_commands = len(logs)
+    probes = len([l for l in logs if 'whois' in l.get('command', '').lower()])
+    result = f"📊 ЛОГИ ДЛЯ: {identifier}\n"
+    result += f"📝 Всего команд: {total_commands}\n"
+    result += f"🔍 Пробивов: {probes}\n"
+    result += f"🕐 За последние 5 дней\n\n"
+    result += "─" * 30 + "\n\n"
+    for log in logs[-50:]:
+        command_text = log.get('command', 'Неизвестно')
+        time = log.get('time', '')
+        result += f"🕐 {time}\n"
+        result += f"📝 {command_text}\n"
+        if log.get('target'):
+            result += f"🎯 {log['target']}\n"
+        result += "─" * 20 + "\n"
+    if len(result) > 4000:
+        parts = [result[i:i+4000] for i in range(0, len(result), 4000)]
+        for part in parts:
+            await message.answer(part)
+    else:
+        await message.answer(result)
+
+@dp.message(Command("whois"))
+async def whois_command(message: types.Message):
+    user_id = message.from_user.id
+    if is_blacklisted(user_id):
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
+        return
+    args = message.text.split(maxsplit=2)
+    if len(args) < 3:
+        await message.answer("❌ /whois ip [IP] или /whois number [НОМЕР]")
+        return
+    command_type = args[1].lower()
+    target = args[2]
+    if command_type == "ip":
+        await probe_ip_command(message, target)
+    elif command_type == "number":
+        await probe_phone_command(message, target)
+    else:
+        await message.answer("❌ Используйте: /whois ip [IP] или /whois number [НОМЕР]")
+
+async def probe_ip_command(message: types.Message, ip: str):
+    try:
+        ipaddress.ip_address(ip)
+    except:
+        await message.answer(f"❌ Некорректный IP: {ip}")
+        return
+    save_log({"command": f"/whois ip {ip}", "user_id": message.from_user.id, "username": message.from_user.username or "Нет", "full_name": message.from_user.full_name or "Нет", "target": ip, "time": get_msk_time()})
+    loading = await show_animation(message)
+    results, success_count = await probe_ip(ip)
+    final = analyze_ip_results(results)
+    await edit_normal_message(message.chat.id, loading.message_id, f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n🌐 IP: {ip}\n🌍 СТРАНА: {final['country']}\n🏙️ РЕГИОН: {final['region']}\n🏙️ ГОРОД: {final['city']}\n📡 ПРОВАЙДЕР: {final['isp']}\n🏢 ОРГАНИЗАЦИЯ: {final['org']}\n🔗 AS: {final['as']}\n⏰ ЧАСОВОЙ ПОЯС: {final['timezone']}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n📊 ОБРАБОТАНО: {success_count}/5 серверов")
+
+async def probe_phone_command(message: types.Message, phone: str):
+    save_log({"command": f"/whois number {phone}", "user_id": message.from_user.id, "username": message.from_user.username or "Нет", "full_name": message.from_user.full_name or "Нет", "target": phone, "time": get_msk_time()})
+    loading = await show_animation(message)
+    results, success_count, local_data = await probe_phone(phone)
+    if local_data and "error" in local_data:
+        await edit_normal_message(message.chat.id, loading.message_id, f"❌ {local_data['error']}")
+        return
+    final = analyze_phone_results(results, local_data)
+    await edit_normal_message(message.chat.id, loading.message_id, f"✅ РЕЗУЛЬТАТ ПРОБИВА\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📱 НОМЕР: {final['formatted']}\n📱 НАЦИОНАЛЬНЫЙ: {final['national']}\n📡 ОПЕРАТОР: {final['operator']}\n🌍 РЕГИОН: {final['region']}\n⏰ ЧАСОВОЙ ПОЯС: {final['timezone']}\n📊 ТИП: {final['type']}\n🌐 КОД СТРАНЫ: {final['country_code']}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n📊 ОБРАБОТАНО: {success_count} серверов")
+
+@dp.message(Command("ban"))
+async def ban_command(message: types.Message):
+    user_id = message.from_user.id    
+    if not is_admin(user_id):
+        await message.answer("❌ У вас нет прав на бан!")
+        return
+    args = message.text.split(maxsplit=3)
+    if len(args) < 3:
+        return "❌ /ban [ID] [время в минутах] [причина]"
+    target_id = args[1]
+    try:
+        time_minutes = int(args[2])
+    except:
+        time_minutes = 60
+    reason = args[3] if len(args) > 3 else "Без причины"
+    add_to_blacklist(target_id, reason, user_id, time_minutes)
+    save_log({"command": f"/ban {target_id}", "user_id": user_id, "username": message.from_user.username or "Нет", "full_name": message.from_user.full_name or "Нет", "target": target_id, "reason": reason, "time_minutes": time_minutes, "time": get_msk_time()})
+    await message.answer(f"✅ {target_id} Был успешно забанен в боте!\n📌 Причина: {reason}\n⏱ Время: {time_minutes} минут")
+    try:
+        time_str = f"{time_minutes} минут" if time_minutes > 0 else "навсегда"
+        await bot.send_message(chat_id=target_id, text=f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}\n⏱ Время: {time_str}")
+    except:
+        pass
+
+@dp.message(Command("unban"))
+async def unban_command(message: types.Message):
+    user_id = message.from_user.id
+    if not is_admin(user_id):
+        await message.answer("❌ У вас нет прав на разбан!")
+        return
+    args = message.text.split(maxsplit=2)
+    if len(args) < 2:
+        return "❌ /unban [ID] [причина]"
+    target_id = args[1]
+    reason = args[2] if len(args) > 2 else "Без причины"
+    if remove_from_blacklist(target_id):
+        save_log({"command": f"/unban {target_id}", "user_id": user_id, "username": message.from_user.username or "Нет", "full_name": message.from_user.full_name or "Нет", "target": target_id, "reason": reason, "time": get_msk_time()})
+        await message.answer(f"✅ {target_id} был разбанен в боте!\n📌 Причина: {reason}")
+        try:
+            await bot.send_message(chat_id=target_id, text=f"✅ ВАС РАЗБАНИЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+        except:
+            pass
+    else:
+        await message.answer(f"❌ Пользователь {target_id} не найден в черном списке")
+
+@dp.message()
+async def handle_private_message(message: types.Message):
+    user_id = message.from_user.id
+    if is_blacklisted(user_id):
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
+        return
+    if not message.text:
+        return
+    text = message.text.strip()
+    if text.startswith('/'):
+        return
+    if text.startswith('.'):
+        await message.answer("❌ Команды с . работают только в чатах с собеседниками!\n📌 В личке используй команды с / (например /help)")
+        return
+    await message.answer("❓ Неизвестная команда\n\n📌 Введи /help для списка команд\n📌 В чатах с собеседниками используй .команды")
+
+@dp.callback_query()
+async def handle_callback(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    if is_blacklisted(user_id):
+        if str(user_id) not in blocked_notified:
+            reason = get_blacklist_reason(user_id)
+            await callback.message.answer(f"⛔ ВАС ЗАБЛОКИРОВАЛИ В БОТЕ!\n\n📌 Причина: {reason}")
+            blocked_notified[str(user_id)] = True
+        await callback.answer()
+        return
+    data = callback.data
+    if data == "probe_ip":
+        await callback.message.answer("🌐 ВВЕДИТЕ IP\n📌 Пример: 8.8.8.8")
+        await callback.answer()
+    elif data == "probe_phone":
+        await callback.message.answer("📱 ВВЕДИТЕ НОМЕР\n📌 Пример: 89001234567")
+        await callback.answer()
+    elif data == "stats":
+        await stats_command(callback.message)
+        await callback.answer()
+
+# ========== ФУНКЦИИ ИЗ ВАШЕГО КОДА (Probe, Animation, Keyboard) ==========
+# ... (здесь вставьте весь ваш код функций delete_business_message, send_to_business_chat, edit_business_message, edit_normal_message, show_animation, probe_ip, probe_phone, analyze_ip_results, analyze_phone_results, get_main_keyboard, business_connection handler, business_message handler, probe_ip_business, probe_phone_business) ...
+# Просто скопируйте их из вашего старого файла сюда дословно.
 
 # ========== ЗАПУСК ==========
 async def main():
@@ -431,7 +657,6 @@ async def main():
                 if file == BLACKLIST_FILE: json.dump({}, f)
                 else: json.dump([], f)
 
-    # Запускаем одновременно и Телеграм, и опрос базы
     worker_task = asyncio.create_task(supabase_worker())
     polling_task = asyncio.create_task(dp.start_polling(bot))
     
