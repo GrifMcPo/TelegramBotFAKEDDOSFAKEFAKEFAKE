@@ -2,21 +2,72 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>RCON Web Panel</title>
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RCON</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Courier New',monospace;background:#0a0e17;color:#e0e8f0;height:100vh;display:flex;justify-content:center;align-items:center}
+        .container{width:100%;max-width:800px;height:90vh;display:flex;flex-direction:column;padding:20px}
+        header{display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid #1a2a3e;margin-bottom:16px}
+        header h1{font-size:28px;color:#00ff88}
+        .status{color:#00ff88;font-size:14px}
+        .quick-commands{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+        .quick-commands button{padding:6px 14px;background:#1a2a3e;color:#8899aa;border:1px solid #1a2a3e;border-radius:8px;cursor:pointer;font-size:12px;font-family:'Courier New',monospace}
+        .quick-commands button:hover{background:#2a3a4e;border-color:#00ff88;color:#fff}
+        .console{flex:1;background:#0d1520;border-radius:12px;border:1px solid #1a2a3e;display:flex;flex-direction:column;overflow:hidden}
+        .console-output{flex:1;padding:20px;overflow-y:auto;font-size:13px;line-height:1.8;background:#0a0e17;min-height:250px;max-height:500px}
+        .console-output::-webkit-scrollbar{width:6px}
+        .console-output::-webkit-scrollbar-track{background:#0a0e17}
+        .console-output::-webkit-scrollbar-thumb{background:#2a3a4e;border-radius:3px}
+        .log-entry{padding:2px 0;border-bottom:1px solid #0d1520}
+        .log-entry .time{color:#556677}
+        .log-entry .command{color:#ffcc44}
+        .log-entry .result{color:#88ddff}
+        .log-entry .error{color:#ff4444}
+        .log-entry .success{color:#00ff88}
+        .log-entry .warning{color:#ffaa44}
+        .console-input{display:flex;padding:12px 16px;border-top:1px solid #1a2a3e;gap:12px}
+        .console-input input{flex:1;padding:12px 16px;background:#0a0e17;border:1px solid #1a2a3e;border-radius:8px;color:#e0e8f0;font-family:'Courier New',monospace;font-size:14px;outline:none}
+        .console-input input:focus{border-color:#00ff88}
+        .console-input button{padding:12px 24px;background:#00ff88;color:#0a0e17;border:none;border-radius:8px;font-weight:bold;cursor:pointer;font-size:14px}
+        .console-input button:hover{background:#00cc77;transform:scale(1.02)}
+        .tip{margin-top:12px;padding:12px;background:#0d1520;border-radius:8px;border:1px solid #1a2a3e;color:#8899aa;font-size:13px;text-align:center}
+    </style>
 </head>
 <body>
-    <div class="wrapper">
-        <h1>🤖 Telegram Bot RCON</h1>
-        <p style="text-align: center; color: #64748b;">Отправляйте команды через сайт. Ответы придут из Telegram.</p>
-        
-        <div id="console" class="terminal"></div>
-        
-        <div class="input-group">
-            <input type="text" id="cmdInput" placeholder="/stats | .whois ip 8.8.8.8" autocomplete="off">
-            <button id="sendBtn">EXECUTE</button>
+    <div class="container">
+        <header>
+            <h1>🚀 RCON</h1>
+            <span class="status">🟢 Бот активен</span>
+        </header>
+
+        <div class="quick-commands">
+            <button onclick="sendCommand('/help')">/help</button>
+            <button onclick="sendCommand('/stats')">/stats</button>
+            <button onclick="sendCommand('/idlist')">/idlist</button>
+            <button onclick="sendCommand('/ping')">/ping</button>
+            <button onclick="sendCommand('/time')">/time</button>
         </div>
+
+        <div class="console">
+            <div class="console-output" id="consoleOutput">
+                <div class="log-entry">
+                    <span class="success">✅ RCON подключен</span><br>
+                    <span class="result">Введите команду или нажмите на кнопку</span>
+                </div>
+            </div>
+            <div class="console-input">
+                <input type="text" id="commandInput" placeholder="Введите команду..." onkeydown="if(event.key==='Enter') sendCommandFromInput()">
+                <button onclick="sendCommandFromInput()">▶ Отправить</button>
+            </div>
+        </div>
+
+        <div class="tip">💡 Команда → Supabase → бот → ответ на сайт</div>
     </div>
-    <script src="script.js"></script>
+
+    <script>
+        const scriptVersion = Date.now();
+        document.write('<script src="script.js?v=' + scriptVersion + '"><\/script>');
+    </script>
 </body>
 </html>
